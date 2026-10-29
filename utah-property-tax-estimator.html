@@ -1,0 +1,1327 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Utah Property Tax Estimator</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,500..800&family=Public+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: two-column worksheet on desktop (inputs left, estimate right), stacked on phones. */
+:root {
+  --bg: #f4f6f4;
+  --surface: #ffffff;
+  --fg: #17201c;
+  --muted: #5b6862;
+  --line: #d6ddd9;
+  --accent: #2f6b57;
+  --accent-ink: #ffffff;
+  --accent-soft: #e3efe9;
+  --warn: #8a5a00;
+  --warn-soft: #fbf1dc;
+  --bad: #a33a2b;
+  --font-display: "Archivo", "Arial Narrow", system-ui, sans-serif;
+  --font-body: "Public Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #111613; --surface: #18201c; --fg: #e5ece8; --muted: #9aa8a1; --line: #2c3833;
+    --accent: #7cc4a6; --accent-ink: #0f1a15; --accent-soft: #1d2f27;
+    --warn: #f0c26a; --warn-soft: #2e2615; --bad: #f08a7a; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #111613; --surface: #18201c; --fg: #e5ece8; --muted: #9aa8a1; --line: #2c3833;
+  --accent: #7cc4a6; --accent-ink: #0f1a15; --accent-soft: #1d2f27;
+  --warn: #f0c26a; --warn-soft: #2e2615; --bad: #f08a7a; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--bg); color: var(--fg);
+  font: 15px/1.55 var(--font-body);
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 28px 48px;
+}
+.wrap { max-width: 1040px; margin: 0 auto; display: grid; gap: 24px; }
+header h1 {
+  font-family: var(--font-display); font-weight: 750; font-stretch: 85%;
+  font-size: clamp(1.7rem, 4vw, 2.3rem); line-height: 1.1; margin: 0; text-wrap: balance;
+}
+header p { margin: 6px 0 0; color: var(--muted); max-width: 62ch; }
+.scope {
+  display: inline-block; margin-top: 10px; font-size: 12px; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--accent); border: 1px solid var(--accent); border-radius: 3px; padding: 2px 8px;
+}
+.grid { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 24px; align-items: start; }
+@media (max-width: 760px) { .grid { grid-template-columns: minmax(0, 1fr); } }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 20px; min-width: 0; }
+form { display: grid; gap: 16px; }
+label, .label { display: block; font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin-bottom: 6px; }
+input[type="text"] {
+  width: 100%; font: 16px var(--font-body); color: var(--fg); background: var(--bg);
+  border: 1px solid var(--line); border-radius: 4px; padding: 10px 12px;
+}
+input[type="text"]:focus-visible, button:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.hint { font-size: 13px; color: var(--muted); margin-top: 5px; }
+.money { position: relative; }
+.money span { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--muted); font-family: var(--font-mono); }
+.money input { padding-left: 26px; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.seg { display: grid; grid-template-columns: 1fr 1fr; border: 1px solid var(--line); border-radius: 4px; overflow: hidden; }
+.seg input { position: absolute; opacity: 0; pointer-events: none; }
+.seg label {
+  margin: 0; text-transform: none; letter-spacing: 0; font-size: 14px; font-weight: 500; color: var(--fg);
+  padding: 9px 10px; text-align: center; cursor: pointer; background: var(--bg);
+}
+.seg label + input + label, .seg input + label + input + label { border-left: 1px solid var(--line); }
+.seg input:checked + label { background: var(--accent); color: var(--accent-ink); }
+.seg input:focus-visible + label { outline: 2px solid var(--accent); outline-offset: -3px; }
+button.primary {
+  font: 600 15px var(--font-body); background: var(--accent); color: var(--accent-ink);
+  border: 0; border-radius: 4px; padding: 11px 16px; cursor: pointer;
+}
+button.primary:disabled { opacity: .6; cursor: progress; }
+button.ghost {
+  font: 500 13px var(--font-body); background: transparent; color: var(--accent);
+  border: 1px solid var(--line); border-radius: 4px; padding: 6px 10px; cursor: pointer;
+}
+.status { font-size: 14px; color: var(--muted); min-height: 1.5em; }
+.status.error { color: var(--bad); }
+
+.result-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px; }
+.tag { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.tag.example { color: var(--warn); }
+.big {
+  font-family: var(--font-display); font-weight: 750; font-stretch: 80%;
+  font-size: clamp(2.6rem, 7vw, 3.6rem); line-height: 1; font-variant-numeric: tabular-nums; margin: 4px 0 2px;
+}
+.big small { font-size: .38em; font-weight: 600; color: var(--muted); font-stretch: 100%; margin-left: 4px; }
+.eqstrip {
+  font-family: var(--font-mono); font-size: 13px; margin-top: 14px; padding: 9px 12px;
+  background: var(--accent-soft); border-radius: 4px; overflow-wrap: anywhere; font-variant-numeric: tabular-nums;
+}
+.eqstrip .kind { display: inline; margin-left: 10px; }
+details.disc { margin-top: 14px; border-top: 1px solid var(--line); padding-top: 10px; }
+details.disc > summary {
+  cursor: pointer; list-style: none; font-size: 13.5px; font-weight: 600; color: var(--accent);
+}
+details.disc > summary::-webkit-details-marker { display: none; }
+details.disc > summary::after { content: "Show"; float: right; font-weight: 500; font-size: 12px; color: var(--muted); }
+details.disc[open] > summary::after { content: "Hide"; }
+details.disc > summary .kind { font-weight: 400; margin-top: 2px; }
+details.disc[open] > summary { margin-bottom: 4px; }
+details.disc .tablewrap, details.disc .warns, details.disc .notes, details.disc p { margin-top: 10px; }
+details.disc .warn { font-size: 13.5px; }
+.parcel { margin-top: 16px; padding: 12px 14px; background: var(--accent-soft); border-radius: 4px; font-size: 14px; }
+.parcel b { font-weight: 600; }
+.parcel .mono { font-family: var(--font-mono); font-size: 13px; }
+.warns { display: grid; gap: 8px; margin-top: 14px; }
+.warn { background: var(--warn-soft); color: var(--fg); border-left: 3px solid var(--warn); padding: 8px 12px; font-size: 14px; border-radius: 0 4px 4px 0; }
+.candidates { display: grid; gap: 6px; margin-top: 10px; }
+.candidates button {
+  text-align: left; font: 14px var(--font-body); color: var(--fg); background: var(--bg);
+  border: 1px solid var(--line); border-radius: 4px; padding: 8px 10px; cursor: pointer;
+}
+.candidates button:hover { border-color: var(--accent); }
+.candidates .mono { font-family: var(--font-mono); font-size: 12px; color: var(--muted); }
+
+h2 { font-family: var(--font-display); font-weight: 700; font-stretch: 90%; font-size: 1.1rem; margin: 22px 0 8px; }
+.tablewrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th { text-align: left; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); font-weight: 600; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+td { padding: 7px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+td.num, th.num { text-align: right; font-family: var(--font-mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+tr.zero td { color: var(--muted); }
+tr.total td { font-weight: 600; border-bottom: 0; }
+.kind { display: block; font-size: 12px; color: var(--muted); }
+table.eq td.t { font-family: var(--font-mono); font-size: 13px; white-space: nowrap; }
+table.eq td.why { font-size: 13px; color: var(--muted); line-height: 1.5; }
+.notes { margin: 6px 0 0; padding-left: 20px; }
+.notes li { font-size: 13.5px; color: var(--muted); margin: 7px 0; line-height: 1.5; }
+
+details.explain { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; }
+details.explain > summary {
+  cursor: pointer; padding: 16px 20px; font-family: var(--font-display); font-weight: 700; font-stretch: 90%; font-size: 1.1rem;
+  list-style: none; display: flex; justify-content: space-between; gap: 12px;
+}
+details.explain > summary::-webkit-details-marker { display: none; }
+details.explain > summary::after { content: "Show"; font: 500 13px var(--font-body); color: var(--accent); align-self: center; }
+details.explain[open] > summary::after { content: "Hide"; }
+.explain-body { padding: 0 20px 20px; max-width: 72ch; }
+.explain-body h3 { font-size: 15px; margin: 20px 0 6px; }
+.explain-body p, .explain-body li { color: var(--fg); }
+.explain-body ol, .explain-body ul { padding-left: 20px; margin: 6px 0; }
+.formula { font-family: var(--font-mono); font-size: 13.5px; background: var(--bg); border: 1px solid var(--line); border-radius: 4px; padding: 10px 12px; overflow-x: auto; white-space: pre; }
+a { color: var(--accent); }
+footer { font-size: 12px; color: var(--muted); }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Utah Property Tax Estimator</h1>
+    <p>Monthly property tax on a home you are buying — parcel, taxing entities and rates read live from Utah state and county data for all 29 counties.</p>
+    <span class="scope">All 29 counties &middot; live state data</span>
+  </header>
+
+  <div class="grid">
+    <section class="panel" aria-label="Inputs">
+      <form id="form" novalidate>
+        <div>
+          <label for="addr">Property address or parcel number</label>
+          <input type="text" id="addr" autocomplete="off" placeholder="810 S 900 E, Salt Lake City">
+          <div class="hint">House number and street; city or ZIP helps. A parcel number from the title report also works.</div>
+        </div>
+        <div>
+          <label for="price">Purchase price</label>
+          <div class="money"><span>$</span><input type="text" id="price" inputmode="decimal" autocomplete="off" value="550,000"></div>
+          <div class="hint">Used when the county publishes no value; shown beside the county's value when it does.</div>
+        </div>
+        <div>
+          <span class="label" id="occ-label">Occupancy</span>
+          <div class="seg" role="radiogroup" aria-labelledby="occ-label">
+            <input type="radio" name="occ" id="occ-primary" value="primary" checked><label for="occ-primary">Primary residence</label>
+            <input type="radio" name="occ" id="occ-other" value="other"><label for="occ-other">Second home / investment</label>
+          </div>
+        </div>
+        <button class="primary" id="go" type="submit">Estimate tax</button>
+        <div class="status" id="status" role="status" aria-live="polite"></div>
+        <div class="candidates" id="candidates" hidden></div>
+      </form>
+    </section>
+
+    <section class="panel" aria-label="Estimate" id="result"></section>
+  </div>
+
+  <details class="explain" id="explain">
+    <summary>How this estimate works</summary>
+    <div class="explain-body">
+      <h3>What it estimates</h3>
+      <p>The general property tax on this home for one full year, divided by 12. That is the property tax part of a monthly escrow payment. It is an estimate of the buyer's tax under the occupancy you select, not the seller's current bill. The result panel names every term in the calculation and says where each one came from.</p>
+
+      <h3>The steps</h3>
+      <ol>
+        <li><b>Find the parcel.</b> The address is turned into a street location, then matched against the statewide parcel layer maintained by the Utah Geospatial Resource Center (UGRC), which covers all 29 counties. You see the matched parcel number, county and recorded address so you can confirm it is the right property.</li>
+        <li><b>Pick a point inside the parcel.</b> The tool uses a point inside the parcel boundary, not the street location, so a house near a district line gets the right districts.</li>
+        <li><b>Find every taxing entity covering that point.</b> Utah property tax is the sum of rates levied by overlapping bodies: the county, the school district, the city or town, and special districts such as water, sewer, fire, library and vector control. Their boundaries and rates come from the Utah State Tax Commission's tax entity data.</li>
+        <li><b>Add the rates.</b> The sum is the combined rate for that tax area. Utah writes rates as decimals: 0.009240 means $9.24 per $1,000 of taxable value, or 0.924%.</li>
+        <li><b>Apply the rate to taxable value.</b> Taxable value is the market value, reduced by the residential exemption when the home will be a primary residence. The market value used is the county assessor's recorded value where the county publishes one, and your purchase price where it does not; when both are available the panel shows the two side by side.</li>
+      </ol>
+
+      <h3>The formula</h3>
+      <div class="formula" id="formula">Market value   = county assessor's value, or your price
+Taxable value  = market value × 55%   (primary residence)
+               = market value × 100%  (anything else)
+Annual tax     = taxable value × combined rate
+Monthly tax    = annual tax ÷ 12</div>
+
+      <h3>The primary residential exemption</h3>
+      <p>Utah taxes a primary residence on 55% of its market value (a 45% exemption, Utah Code 59-2-1035). Second homes, short-term rentals and most investment property are taxed on 100%, so their tax is close to double. The exemption covers the home and up to one acre of land per unit. On a larger lot the land beyond one acre is taxed at full value, so the estimate runs slightly low; the tool flags lots over one acre.</p>
+
+      <h3>Which value the estimate uses</h3>
+      <p>A bill is built on the assessor's market value, not on the sale price. The county's value is re-set every January 1 and does not move automatically when a home sells. When the county record carries a value, the estimate uses it and shows your price next to it as a comparison. Where the county publishes no value, the price stands in, and the panel says so. For reference, the Tax Commission's assessment-to-sales ratio study (2023) found the county's value sat at 95.5% of sale price in Salt Lake, 95.4% in Utah, 95.8% in Davis, 97.5% in Weber, 94.9% in Washington and near 100% in Cache and Tooele, with the state requiring the typical ratio to fall between 90% and 110%. So a typed price is usually a few percent high, not wildly wrong.</p>
+
+      <h3>If you are comparing it with a listing or someone's bill</h3>
+      <p>Two things shift between a notice and a purchase. <b>Occupancy:</b> the number on a listing or a seller's notice reflects the <i>seller's</i> occupancy. A house the seller rented is taxed on 100% of its value; the same house lived in by its owner is taxed on 55%. A change of occupancy at purchase moves the tax by close to half, in either direction, which is a bigger effect than anything else on this page. <b>Timing:</b> value and rate are both fixed as of January 1, a sale does not re-set the value on its own, and new improvements are normally added to the roll at the following January 1, so the first year after a purchase or a new build can land away from both figures shown here.</p>
+
+      <h3>Which rates, and for which year</h3>
+      <p>"Rate year" is the tax year the rates come from. Utah entities certify new rates in the fall and the Tax Commission publishes them over the winter, so for much of a given year the newest published rates are for the tax year before the one now in progress. Rates usually drift up a little each year; the county assessor can tell you what is proposed going forward.</p>
+
+      <h3>How the rates were checked</h3>
+      <p>The summed rates were compared with Report 600, the Utah State Tax Commission's list of certified and adopted rates by tax area, which is what assessors and treasurers work from. Sampling parcels across Salt Lake, Utah and Davis counties, the summed entity rate equalled the Commission's <i>Final Adopted Tax Rate</i> for the tax area on 75 of 75 sampled points for tax year 2024 and 73 of 75 for 2025. The two misses were parcels sitting on area boundaries that the state's entity maps do not draw exactly.</p>
+
+      <h3>What is not included</h3>
+      <ul>
+        <li>Special assessments and improvement district charges billed with the tax notice, such as streets, sewers or irrigation paid off against property.</li>
+        <li>City fees some counties collect on the tax notice, such as stormwater or street lighting.</li>
+        <li>Personal exemptions and relief: disabled veteran, blind, active duty military, circuit breaker and similar.</li>
+        <li>Delinquent tax, penalties, or rollback tax on land leaving greenbelt status.</li>
+        <li>Land over one acre: the residential exemption stops at one acre, so a large lot is taxed on more of its value than a simple 55% and the estimate runs low. Lots over one acre are flagged.</li>
+        <li>Tax increment financing effects. A community reinvestment or development area redirects part of the rate to another taxing entity; it does not change what the owner pays.</li>
+      </ul>
+
+      <h3>Checks the tool runs while it works</h3>
+      <ul>
+        <li>It warns if the parcel falls inside more than one city or more than one school district, which means it sits on a boundary the state data does not draw exactly.</li>
+        <li>It warns when no school district or county levy is found, which means a gap in the state data rather than a real zero.</li>
+        <li>It warns when the address could only be matched approximately, and lists the next best parcels so you can switch.</li>
+        <li>Reinvestment and development areas are listed with a zero rate. They change where the money goes, not how much the owner pays.</li>
+      </ul>
+
+      <h3>Data sources</h3>
+      <ul>
+        <li>Parcels: UGRC statewide parcel layer, <span class="mono">UtahStatewideParcels</span>, with county layers used for the recorded market value and acreage where the county publishes them.</li>
+        <li>Rates and boundaries: Utah State Tax Commission tax entity polygons, published by UGRC. Boundaries are approximate, not legal descriptions.</li>
+        <li>Street locations: the ESRI World Geocoding Service, used only to turn your address into a point.</li>
+        <li>Rates cross-checked against Utah State Tax Commission Report 600.</li>
+        <li>To confirm a specific bill, use the county treasurer's records or the title report.</li>
+      </ul>
+    </div>
+  </details>
+
+  <footer>Estimate only. Not a tax bill or legal determination. Parcel and rate data is fetched live from State of Utah services each time you run an estimate.</footer>
+</div>
+<script id="logic">
+/* ---------- Pure logic (no DOM, no network) so it can be unit tested ---------- */
+var ARCGIS = "https://services1.arcgis.com/99lidPhWCzftIe9K/ArcGIS/rest/services/";
+var PARCELS_SERVICE = "UtahStatewideParcels";
+/* Newest first. The tool uses the first service that answers with real rates. */
+var ENTITY_SERVICES = ["economy_tax_entities_2026", "economy_tax_entities_2025"];
+var GEOCODE_URL = "https://geocode.arcgis.com/arcgis/rest/services/World/GeocodeServer/findAddressCandidates";
+var RESIDENTIAL_TAXABLE_SHARE = 0.55;
+/* Address scores: at or above MATCH_MIN the address is taken to be the same property. */
+var MATCH_MIN = 0.75;
+var MAYBE_MIN = 0.5;
+
+var WORD_MAP = {
+  NORTH: "N", SOUTH: "S", EAST: "E", WEST: "W", NORTHEAST: "NE", NORTHWEST: "NW", SOUTHEAST: "SE", SOUTHWEST: "SW",
+  STREET: "ST", STR: "ST", AVENUE: "AVE", AV: "AVE", DRIVE: "DR", ROAD: "RD", LANE: "LN", CIRCLE: "CIR",
+  COURT: "CT", BOULEVARD: "BLVD", PLACE: "PL", PARKWAY: "PKWY", TERRACE: "TER", HIGHWAY: "HWY", TRAIL: "TRL",
+  CRESCENT: "CRES", TURNPIKE: "TPKE", EXPRESSWAY: "EXPY", FREEWAY: "FWY", PLAZA: "PLZ",
+  POINT: "PT", RIDGE: "RDG", MOUNT: "MT"
+};
+var DIRS = { N: 1, S: 1, E: 1, W: 1, NE: 1, NW: 1, SE: 1, SW: 1 };
+var SUFFIXES = { ST: 1, AVE: 1, DR: 1, RD: 1, LN: 1, CIR: 1, CT: 1, BLVD: 1, PL: 1, PKWY: 1, TER: 1, HWY: 1, TRL: 1, WAY: 1, CV: 1, CRES: 1, PT: 1, RDG: 1, PLZ: 1, EXPY: 1, FWY: 1, TPKE: 1, CL: 1, MT: 1 };
+var FILLER = { THE: 1, OF: 1, AT: 1, ON: 1, AND: 1, OLD: 1 };
+/* A unit designator, and only a whole word: "STE 701", "#4B", "UNIT C4". Without the word
+   boundary this also matched the NO in "NORTH" and turned 1921 N First Love Dr into unit RTH. */
+var UNIT_RE = /(?:^|[\s,])(?:#\s*|(?:APT|APTS|APTMT|UNIT|SUITE|STE|RM|ROOM|BLDG|BLD|LOBBY|FL|TRLR|LOT|SPACE|PKG|NO|NUM)\b[\s.:=#-]*)([A-Z][A-Z0-9-]*|[0-9]{1,6}[A-Z]?)\b/i;
+
+function parsePrice(s) {
+  var t = String(s == null ? "" : s).toLowerCase().replace(/[,\s$]/g, "");
+  var m = t.match(/^(\d+(?:\.\d+)?)([km])?$/);
+  if (!m) return null;
+  var n = parseFloat(m[1]) * (m[2] === "k" ? 1e3 : m[2] === "m" ? 1e6 : 1);
+  return isFinite(n) && n > 0 ? n : null;
+}
+
+function looksLikeParcelId(s) {
+  var t = String(s).trim();
+  if (!t || /[,@]/.test(t)) return false;
+  var digits = (t.match(/\d/g) || []).length;
+  var letters = (t.match(/[A-Za-z]/g) || []).length;
+  return digits >= 7 && letters <= 1 && !/\s[A-Za-z]{2,}/.test(t);
+}
+
+function sqlQuote(s) { return "'" + String(s).replace(/'/g, "''") + "'"; }
+
+/* Utah street addresses are written the way county records store them: grid addresses like
+   "810 W 900 S", street names abbreviated, punctuation dropped. */
+function normalizeAddress(s) {
+  return String(s == null ? "" : s)
+    .toUpperCase()
+    .replace(/[.,'\/\-]/g, " ")
+    .replace(/\s+/g, " ")
+    .split(" ")
+    .map(function (w) { return Object.prototype.hasOwnProperty.call(WORD_MAP, w) ? WORD_MAP[w] : w; })
+    .filter(Boolean)
+    .join(" ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/* Pulls a unit number out of an address line: "185 N MAIN ST STE 701" -> street + 701. */
+function splitUnit(street) {
+  var t = String(street == null ? "" : street), m = t.match(UNIT_RE);
+  if (!m) return { street: t.trim(), unit: null };
+  var unit = String(m[1] || "").trim();
+  var rest = (t.slice(0, m.index) + " " + t.slice(m.index).replace(m[0], "")).replace(/\s+/g, " ").trim();
+  return { street: rest, unit: unit };
+}
+
+/* Splits "810 S 900 E, Salt Lake City, UT 84102" into what Utah matching needs:
+   house number, grid directions, street words, unit, city. */
+function parseAddress(input) {
+  var raw = String(input == null ? "" : input);
+  var parts = raw.toUpperCase().replace(/[.'’]/g, " ").split(",");
+  var street = parts[0] || "";
+  var locality = parts.slice(1).join(" ").replace(/\bU\.?S\.?A\.?\b/g, " ");
+  var zipM = locality.match(/\b(\d{5})(?:-\d{4})?\b/);
+  var zip = zipM ? zipM[1] : null;
+  var city = locality.replace(/\d{5}(-\d{4})?/, " ").replace(/\bUT(AH)?\b/g, " ").replace(/\s+/g, " ").trim() || null;
+
+  var u = splitUnit(street);
+  var norm = normalizeAddress(u.street);
+  var toks = norm.split(" ").filter(Boolean);
+  var house = null;
+  if (toks.length && /^\d{1,6}[A-Z]?$/.test(toks[0])) house = toks.shift();
+  var dirs = [], numbers = [], keys = [];
+  toks.forEach(function (t) {
+    if (DIRS[t]) { dirs.push(t); return; }
+    if (/^\d{1,5}[A-Z]?$/.test(t)) { numbers.push(t); return; }
+    if (FILLER[t]) return;
+    keys.push(t);
+  });
+  return {
+    raw: raw, norm: norm, house: house, dirs: dirs, numbers: numbers, unit: u.unit, city: city, zip: zip,
+    keys: keys.filter(function (k) { return !SUFFIXES[k]; }),
+    tail: toks.join(" ")
+  };
+}
+
+/* Direction letters carry the meaning in Utah grid addressing: 900 E and 900 W are two miles
+   apart. Matching sets score 1, missing or extra letters score 0.8, contradictory letters score
+   0.3, because "N" and "S" (or "E" and "W") name opposite sides of the baseline. */
+function dirsFactor(a, b) {
+  var x = (a || []).filter(function (d) { return DIRS[d]; }).slice().sort().join("");
+  var y = (b || []).filter(function (d) { return DIRS[d]; }).slice().sort().join("");
+  if (x === y) return 1;
+  var opposed = (x.indexOf("N") >= 0 && y.indexOf("S") >= 0) || (x.indexOf("S") >= 0 && y.indexOf("N") >= 0) ||
+    (x.indexOf("E") >= 0 && y.indexOf("W") >= 0) || (x.indexOf("W") >= 0 && y.indexOf("E") >= 0);
+  if (opposed) return 0.3;
+  if (!x.length || !y.length) return 0.8;
+  var inY = x.split("").every(function (d) { return y.indexOf(d) >= 0; });
+  var inX = y.split("").every(function (d) { return x.indexOf(d) >= 0; });
+  return inY || inX ? 0.8 : 0.3;
+}
+
+/* The words that name the street, once directions, suffixes and filler are gone:
+   "S 900 E" -> [900], "N FIRST LOVE DR" -> [FIRST, LOVE]. */
+function identityTokens(toks) {
+  return (toks || []).filter(function (t) { return !DIRS[t] && !SUFFIXES[t] && !FILLER[t]; });
+}
+
+/* Names have to agree word for word: "FIRST LOVE" and "SECOND LOVE" are different streets, but an
+   address carrying extra words is still the same street. */
+function streetScore(idNeed, idHave) {
+  if (!idNeed.length) return idHave.length ? 0.6 : 1;
+  if (!idHave.length) return 0.6;
+  var missing = idNeed.filter(function (t) { return idHave.indexOf(t) < 0; });
+  var extra = idHave.filter(function (t) { return idNeed.indexOf(t) < 0; });
+  if (!missing.length && !extra.length) return 1;
+  if (!missing.length || !extra.length) return 0.85;
+  return 0.25;
+}
+
+/* How much a parcel's recorded address looks like the address the buyer typed.
+   1 = same property; 0 = a different property. The house number has to agree (within a few,
+   because geocoders interpolate along the block), the street words have to line up and the grid
+   directions must not contradict, so "810 S 900 E" never matches "810 W 900 S". */
+/* Utah's grid addresses put the corner in the order: "810 S 900 E" is the block south of 900 East,
+   "810 E 900 S" is the block east of 810 South. Same words, different corner, different tax bill. */
+function gridPattern(toks) {
+  return (toks || []).filter(function (t) { return DIRS[t] || /^\d+$/.test(t); });
+}
+function gridOrderFactor(needToks, haveToks) {
+  var a = gridPattern(needToks), b = gridPattern(haveToks);
+  if (!a.length || !b.length) return 1;
+  if (a.join(" ") === b.join(" ")) return 1;
+  if (a.slice().sort().join(" ") !== b.slice().sort().join(" ")) return 1; // genuinely different streets
+  return 0.35; // same pieces in a different order: a corner swap, not a match
+}
+
+function addressSimilarity(parsed, addr) {
+  var p = typeof parsed === "string" ? parseAddress(parsed) : parsed;
+  if (!p || !p.house) return 0;
+  var cand = splitUnit(normalizeAddress(addr));
+  var c = cand.street.split(" ").filter(Boolean);
+  if (!c.length) return 0;
+  var houseScore;
+  if (c[0] === p.house) houseScore = 1;
+  else if (/^\d/.test(c[0]) && Math.abs(Number(c[0].replace(/\D/g, "")) - Number(p.house.replace(/\D/g, ""))) <= 3) houseScore = 0.6;
+  else return 0;
+  var s = houseScore * streetScore(identityTokens((p.tail || "").split(" ")), identityTokens(c.slice(1))) *
+    dirsFactor(p.dirs, c.slice(1)) * gridOrderFactor((p.tail || "").split(" "), c.slice(1));
+  var unitIn = p.unit ? normalizeAddress(p.unit).replace(/\s+/g, "") : null;
+  var unitCand = cand.unit ? normalizeAddress(cand.unit).replace(/\s+/g, "") : null;
+  if (unitIn && unitCand) s *= unitIn === unitCand ? 1 : 0;
+  else if (!!unitIn !== !!unitCand) s *= 0.95;
+  return Math.max(0, Math.min(1, Math.round(s * 100) / 100));
+}
+
+/* Superset filter for the parcel service: house number as a strict prefix plus the street words.
+   Deliberately loose; addressSimilarity does the strict part. */
+function buildAddressWhere(parsed) {
+  var p = typeof parsed === "string" ? parseAddress(parsed) : parsed;
+  if (!p || !p.house) return null;
+  var up = "UPPER(PARCEL_ADD)";
+  var clauses = [up + " LIKE " + sqlQuote(p.house + " %")];
+  var keys = p.keys.filter(function (k, i, a) { return k.length >= 3 && a.indexOf(k) === i; }).slice(0, 4);
+  if (keys.length) {
+    var k0 = keys[0];
+    clauses.push("(" + up + " LIKE " + sqlQuote("% " + k0 + " %") + " OR " + up + " LIKE " + sqlQuote("% " + k0) + " OR " + up + " LIKE " + sqlQuote(k0 + " %") + ")");
+    keys.slice(1).forEach(function (k) { clauses.push(up + " LIKE " + sqlQuote("%" + k + "%")); });
+  }
+  p.numbers.slice(0, 2).forEach(function (n) {
+    clauses.push("(" + up + " LIKE " + sqlQuote("% " + n + " %") + " OR " + up + " LIKE " + sqlQuote("% " + n) + ")");
+  });
+  return clauses.join(" AND ");
+}
+
+/* Utah parcel ids are written differently by every county: 15112540240000, 45:866:0128,
+   02-031-0-0041, C123-4567-001. Try the shapes a buyer is likely to paste. */
+function parcelIdVariants(raw) {
+  var t = String(raw == null ? "" : raw).trim().toUpperCase();
+  var alnum = t.replace(/[^0-9A-Z]/g, "");
+  var digits = t.replace(/[^0-9]/g, "");
+  var out = [];
+  [t, alnum, digits, digits.replace(/^0+/, "")].forEach(function (v) {
+    if (v && v.length >= 5 && out.indexOf(v) < 0) out.push(v);
+  });
+  return out;
+}
+
+/* mode "exact" = the id as written; mode "prefix" = also catch ids that continue the digits,
+   which covers people who leave off a county's trailing zero padding. */
+function buildParcelIdWhere(raw, mode) {
+  var vals = parcelIdVariants(raw).filter(function (v, i, a) { return a.indexOf(v) === i; });
+  if (!vals.length) return null;
+  var fields = ["PARCEL_ID", "ACCOUNT_NUM"];
+  var ors = [];
+  vals.forEach(function (v) {
+    fields.forEach(function (f) {
+      ors.push(mode === "prefix" && v.length >= 7 ? f + " LIKE " + sqlQuote(v + "%") : f + " = " + sqlQuote(v));
+    });
+  });
+  return "(" + ors.join(" OR ") + ")";
+}
+
+function attrs(f) {
+  if (!f) return {};
+  if (f.attributes) return f.attributes;
+  if (f.properties) return f.properties;
+  return f;
+}
+
+/* Great-circle distance in metres: how far a parcel sits from the geocoded street point. */
+function distanceMeters(a, b) {
+  var R = 6371000, rad = Math.PI / 180;
+  var dLat = (b[1] - a[1]) * rad, dLon = (b[0] - a[0]) * rad;
+  var h = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(a[1] * rad) * Math.cos(b[1] * rad) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
+}
+
+function pointInRings(x, y, rings) {
+  var inside = false;
+  rings.forEach(function (r) {
+    for (var i = 0, j = r.length - 1; i < r.length; j = i++) {
+      var xi = r[i][0], yi = r[i][1], xj = r[j][0], yj = r[j][1];
+      if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) inside = !inside;
+    }
+  });
+  return inside;
+}
+
+/* Interior point of a polygon (rings in lon/lat): the centroid when it falls inside, otherwise
+   the middle of the widest span on a horizontal line through the centroid. */
+function interiorPoint(rings) {
+  var outer = rings[0], a = 0, cx = 0, cy = 0;
+  for (var i = 0, j = outer.length - 1; i < outer.length; j = i++) {
+    var f = outer[j][0] * outer[i][1] - outer[i][0] * outer[j][1];
+    a += f; cx += (outer[j][0] + outer[i][0]) * f; cy += (outer[j][1] + outer[i][1]) * f;
+  }
+  if (a !== 0) { cx /= (3 * a); cy /= (3 * a); }
+  else { cx = outer[0][0]; cy = outer[0][1]; }
+  if (pointInRings(cx, cy, rings)) return [cx, cy];
+  var xs = [];
+  rings.forEach(function (r) {
+    for (var i = 0, j = r.length - 1; i < r.length; j = i++) {
+      var yi = r[i][1], yj = r[j][1];
+      if ((yi > cy) !== (yj > cy)) xs.push(r[i][0] + (cy - yi) * (r[j][0] - r[i][0]) / (yj - yi));
+    }
+  });
+  xs.sort(function (p, q) { return p - q; });
+  var best = null, w = -1;
+  for (var k = 0; k + 1 < xs.length; k += 2) if (xs[k + 1] - xs[k] > w) { w = xs[k + 1] - xs[k]; best = [(xs[k] + xs[k + 1]) / 2, cy]; }
+  return best || [outer[0][0], outer[0][1]];
+}
+
+/* Rank parcels found near a geocoded point. A clear address match always beats a closer parcel
+   with a different address, because the geocoded point lands on the street between properties. */
+function rankParcels(features, parsed, pt) {
+  var p = typeof parsed === "string" ? parseAddress(parsed) : parsed;
+  return (features || []).map(function (f) {
+    var c = attrs(f);
+    if (!c.PARCEL_ID && !c.PARCEL_ADD) return null;
+    var rings = (f && f.geometry && f.geometry.rings) || null;
+    var m = pt && rings && rings.length ? Math.round(distanceMeters(pt, interiorPoint(rings))) : null;
+    var inside = pt && rings && rings.length && pointInRings(pt[0], pt[1], rings) ? 4000 : 0;
+    var a = addressSimilarity(p, c.PARCEL_ADD);
+    var bucket = a >= MATCH_MIN ? 2 : a >= MAYBE_MIN ? 1 : 0;
+    // Nobody shops for a street or a state right-of-way, so those lose a "nearest parcel" tie; an
+    // address that really matches still wins by the bucket term.
+    var gov = /government|state of utah|\budot\b|right of way/i.test(String(c.OWN_TYPE || "") + " " + String(c.PARCEL_ID || "")) ? -1200 : 0;
+    var s = bucket * 1e6 + inside + gov + (m == null ? 3000 : Math.max(0, 3000 - Math.min(m, 3000))) + a * 10;
+    return { c: c, a: a, m: m, rings: rings, bucket: bucket, s: s, inside: !!inside };
+  }).filter(Boolean).sort(function (x, y) { return y.s - x.s; });
+}
+
+/* Keep only geocode results that are really a Utah street address for what was asked. The world
+   geocoder happily answers "1387 S San Antonio Rd, La Junta" with a town in Costa Rica. */
+function rankGeocodeCandidates(json, parsed) {
+  var p = typeof parsed === "string" ? parseAddress(parsed) : parsed;
+  var cands = (json && json.candidates) || [];
+  var out = [];
+  cands.forEach(function (c) {
+    if (!c) return;
+    var loc = c.location || {};
+    if (!isFinite(loc.x) || !isFinite(loc.y)) return;
+    var label = String(c.address || "");
+    var at = c.attributes || {};
+    var type = String(at.Addr_type || at.AddrType || c.type || "");
+    if (!/,\s*Utah\b/i.test(label)) return;
+    if (/^(Locality|PostalCity|State|Country|Region|Postal Code)$/i.test(type)) return;
+    if (!(Number(c.score) >= 85)) return;
+    if (p && p.house && !new RegExp("(^|\\s)" + p.house + "(\\s|$)").test(label)) return;
+    out.push({ x: loc.x, y: loc.y, label: label, score: Number(c.score) || 0, type: type });
+  });
+  return out.sort(function (a, b) { return b.score - a.score; });
+}
+
+/* Utah entity numbers are assigned by type: 1xxx county levies, 2xxx school districts,
+   3xxx cities and towns, 4xxx and 5xxx special districts, 6xxx other local levies,
+   8xxx tax-increment areas. Descriptions win where they disagree, because a few long-standing
+   numbers predate the scheme (3071 is the Salt Lake Library Foundation, not a city). */
+function entityKind(nbr, desc) {
+  var d = String(desc || "").toUpperCase(), n = Number(nbr);
+  if (/COMMUNITY REINVESTMENT|REDEVELOPMENT|DEVELOPMENT ZONE|TRADE|INCENTIVE|CORRIDOR|MAIN STREET/.test(d)) return "Tax-increment area";
+  if (/SCHOOL|EDUCATION/.test(d)) return "School district";
+  if (/LIBRARY/.test(d)) return "Library";
+  if (/SPECIAL SERVICE DISTRICT|HUMAN SERVICES|BEHAVIORAL HEALTH|ANIMAL/.test(d)) return "Special service district";
+  if (/PUBLIC INFRASTRUCTURE|\bPID\b|PROC|CAPITAL RETAIL|INFRASTRUCTURE/.test(d)) return "Infrastructure district";
+  if (/METROPOLITAN|COUNCIL OF GOVERNMENT|\bMETRO\b/.test(d)) return "Metropolitan district";
+  if (/SEWER|SANITATION|TREATMENT|WASTEWATER/.test(d)) return "Sewer district";
+  if (/WATER|CONSERVANCY|IRRIGATION|DITCH|COMPANY/.test(d)) return "Water district";
+  if (/FIRE/.test(d)) return "Fire district";
+  if (/MOSQUITO|VECTOR|PEST|NOXIOUS/.test(d)) return "Vector control";
+  if (/SIDEWALK|CURB/.test(d)) return "Sidewalk district";
+  if (/LIGHTING|LIGHT/.test(d)) return "Street lighting";
+  if (/TRANSIT|TRAX|\bBUS\b|RAIL|AIRPORT/.test(d)) return "Transit or airport";
+  if (/MUNICIPAL|SERVICE AREA|SAFETY|HOSPITAL|MEDICAL|CEMETERY|ZOO|MUSEUM|BOTANIC|GARDEN|SYMPHONY|SENIOR/.test(d)) return "Other local levy";
+  if (/COUNTY/.test(d) && /LEVY|ASSESS|COLLECT|AUDIT|TAXING/.test(d)) return "County levy";
+  if (!isFinite(n)) return "Other levy";
+  if (n >= 8000) return "Tax-increment area";
+  if (n >= 6000) return "Other local levy";
+  if (n >= 4000) return "Special district";
+  if (n >= 3000) return "City or town";
+  if (n >= 2000) return "School district";
+  if (n >= 1000) return "County levy";
+  return "Statewide or multi-county levy";
+}
+
+var COUNTY_CODES = {
+  "01": "Beaver", "02": "Box Elder", "03": "Cache", "04": "Carbon", "05": "Daggett", "06": "Davis",
+  "07": "Duchesne", "08": "Emery", "09": "Garfield", "10": "Grand", "11": "Iron", "12": "Juab",
+  "13": "Kane", "14": "Millard", "15": "Morgan", "16": "Piute", "17": "Rich", "18": "Salt Lake",
+  "19": "San Juan", "20": "Sanpete", "21": "Sevier", "22": "Summit", "23": "Tooele", "24": "Uintah",
+  "25": "Utah", "26": "Wasatch", "27": "Washington", "28": "Wayne", "29": "Weber"
+};
+function countyFromCode(co) {
+  var k = String(co == null ? "" : co).replace(/[^0-9]/g, "");
+  if (!k) return null;
+  k = ("0" + k).slice(-2);
+  return COUNTY_CODES[k] || null;
+}
+function countyLabel(s) { return String(s == null ? "" : s).replace(/([a-z])([A-Z])/g, "$1 $2"); }
+/* UGRC writes the county as one word (SaltLake); the parcel detail layers are named the same way. */
+function countyKey(s) {
+  var t = String(s == null ? "" : s).replace(/[^A-Za-z]/g, " ").replace(/\s+/g, " ").trim();
+  if (!t) return "";
+  if (/[a-z]/.test(t) && /[A-Z]/.test(t)) return t.replace(/ /g, "");
+  return t.toLowerCase().split(" ").map(function (w) { return w.charAt(0).toUpperCase() + w.slice(1); }).join("");
+}
+
+/* Rows for the table, the summed rate, and the checks a careful preparer would run. */
+function summarizeEntities(features) {
+  var seen = {}, rows = [];
+  (features || []).forEach(function (f) {
+    var a = attrs(f);
+    var key = String(a.ENT_CO || "") + "|" + (a.ENT_NBR != null ? a.ENT_NBR : a.ENT_DESC);
+    if (seen[key]) return;
+    seen[key] = 1;
+    rows.push({
+      name: String(a.ENT_DESC || "Unnamed taxing entity").trim(),
+      nbr: a.ENT_NBR, kind: entityKind(a.ENT_NBR, a.ENT_DESC),
+      rate: Number(a.ENT_RATE) || 0, year: a.ENT_YR, county: countyFromCode(a.ENT_CO)
+    });
+  });
+  rows.sort(function (x, y) { return y.rate - x.rate; });
+  var total = Math.round(rows.reduce(function (s, r) { return s + r.rate; }, 0) * 1e6) / 1e6;
+  var years = rows.map(function (r) { return Number(r.year) || 0; }).filter(Boolean);
+  var year = years.length ? Math.max.apply(null, years) : null;
+  var count = function (k) { return rows.filter(function (r) { return r.kind === k && r.rate > 0; }).length; };
+  var warnings = [];
+  if (count("City or town") > 1) warnings.push("This parcel falls inside more than one city. It likely sits on a boundary the state data does not draw exactly, so check the city on the tax notice.");
+  if (count("School district") > 1) warnings.push("This parcel falls inside more than one school district. Check which district appears on the tax notice.");
+  if (rows.length && count("School district") === 0) warnings.push("No school district levy was found here. That is unusual and suggests a gap in the state data.");
+  if (rows.length && count("County levy") === 0) warnings.push("No county levy was found here. That suggests a gap in the state data.");
+  return { rows: rows, total: total, year: year, warnings: warnings, count: rows.length };
+}
+
+function computeTax(price, primary, rate) {
+  var share = primary ? RESIDENTIAL_TAXABLE_SHARE : 1;
+  var taxable = price * share;
+  var annual = taxable * rate;
+  return { share: share, taxable: taxable, annual: annual, monthly: annual / 12 };
+}
+
+/* ---------- Formatting helpers, kept here so the equation text is unit tested ---------- */
+function money(n, d) {
+  var v = Number(n) || 0, p = d == null ? 0 : d;
+  return "$" + v.toLocaleString("en-US", { minimumFractionDigits: p, maximumFractionDigits: p });
+}
+function rateStr(r) { return (Number(r) || 0).toFixed(6); }
+function pct(x, d) { return ((Number(x) || 0) * 100).toFixed(d == null ? 0 : d) + "%"; }
+
+/* One way of reading the value: the assessor's number, or the price being paid.
+   Everything downstream (annual, monthly, per $1,000) hangs off that one choice. */
+function taxScenario(basis, value, primary, rate) {
+  var share = primary ? RESIDENTIAL_TAXABLE_SHARE : 1;
+  var taxable = value * share;
+  var annual = taxable * rate;
+  return {
+    basis: basis, value: value, share: share, taxable: taxable, rate: rate,
+    perThousand: rate * 1000, annual: annual, monthly: annual / 12
+  };
+}
+
+/* The bill is built from the assessor's value, so when the county publishes one it leads
+   the answer and the purchase price becomes the comparison next to it. */
+function estimateSet(o) {
+  var price = Number(o.price) || 0, countyValue = Number(o.countyValue) || 0, rate = Number(o.rate) || 0;
+  var list = [];
+  if (countyValue > 0) list.push(taxScenario("county", countyValue, !!o.primary, rate));
+  if (price > 0) list.push(taxScenario("price", price, !!o.primary, rate));
+  var by = {};
+  list.forEach(function (s) { by[s.basis] = s; });
+  var preferred = by.county || by.price || null;
+  var comparison = by.county ? (by.price || null) : null;
+  var diff = (by.county && by.price) ? {
+    monthly: by.price.monthly - by.county.monthly,
+    annual: by.price.annual - by.county.annual,
+    pct: by.county.annual ? (by.price.annual / by.county.annual - 1) : 0
+  } : null;
+  return { list: list, by: by, preferred: preferred, comparison: comparison, diff: diff };
+}
+
+function basisLabel(basis) {
+  return basis === "county" ? "the county assessor's value on record" : "the purchase price you entered";
+}
+
+/* The whole arithmetic in one line, for readers who only want the shape of it. */
+function equationStrip(sc) {
+  var head = sc.share < 1
+    ? pct(sc.share) + " of " + money(sc.value) + " → " + money(sc.taxable, 0) + " taxable"
+    : money(sc.taxable, 0) + " taxable";
+  return head + " × " + rateStr(sc.rate) + " = " + money(sc.annual, 2) + "/yr · " + money(sc.monthly, 2) + "/mo";
+}
+
+/* What the two value readings disagree by, said as a sentence for a summary line. */
+function diffPhrase(diff) {
+  if (!diff) return "";
+  var up = diff.monthly >= 0;
+  return "your price would " + (up ? "add " : "trim ") + money(Math.abs(diff.monthly), 2) + "/mo (" +
+    (up ? "+" : "−") + pct(Math.abs(diff.pct), 1) + ")";
+}
+
+/* Which notes deserve the reader's eye and which can wait behind a click. Which parcel this
+   answer came from, and gaps in the state data, stay up top; the method caveats fold away. */
+function splitNotes(warns) {
+  var top = [], fine = [];
+  (warns || []).forEach(function (w) {
+    if (/^(No parcel in the state file|This is the parcel|You picked this parcel|Enter a purchase price)/.test(w) ||
+        /more than one (city|school district)|No school district levy|No county levy/.test(w)) top.push(w);
+    else fine.push(w);
+  });
+  return { top: top, fine: fine };
+}
+
+function asOfDate(ms) {
+  var n = Number(ms);
+  if (!isFinite(n) || n <= 0) return "";
+  try {
+    return new Date(n).toLocaleDateString("en-US", { timeZone: "UTC", year: "numeric", month: "long", day: "numeric" });
+  } catch (e) { return ""; }
+}
+
+/* What the county's own record says about the parcel. The class decides whether the
+   residential exemption exists at all, and the occupancy the county records is the
+   seller's, not the buyer's. */
+function parcelSignals(d) {
+  d = d || {};
+  var klass = d.PROP_CLASS ? String(d.PROP_CLASS).replace(/_/g, " ").trim() : "";
+  var lower = klass.toLowerCase();
+  var pr = d.PRIMARY_RES == null ? "" : String(d.PRIMARY_RES).trim().toUpperCase();
+  return {
+    klass: klass,
+    residential: /residential|single family|condo|townhouse/.test(lower),
+    primaryRes: pr === "Y" || pr === "N" ? pr : "",
+    exempt: d.TAXEXEMPT_TYPE ? String(d.TAXEXEMPT_TYPE).trim() : "",
+    value: Number(d.TOTAL_MKT_VALUE) || 0,
+    asOf: asOfDate(d.CURRENT_ASOF)
+  };
+}
+
+function parcelClassWarnings(sig, o) {
+  o = o || {};
+  var w = [];
+  if (sig.klass && !sig.residential) {
+    w.push("The county classifies this parcel as " + sig.klass + ", not as a residence, so the value and rate here describe that use. A home on this land would be classified, valued and taxed differently, so confirm with the county assessor before quoting a figure." +
+      (sig.exempt ? " The county also records it as tax exempt (" + sig.exempt + "), so today it carries little or no property tax: the figure above is what the same value and rates would produce if the parcel were taxable." : ""));
+  } else if (sig.exempt) {
+    w.push("The county records this parcel as tax exempt (" + sig.exempt + "), so it carries little or no property tax today. The figure above is what the same value and rates would produce if it were taxable.");
+  }
+  if (sig.primaryRes && o.selectedPrimary != null) {
+    if (sig.primaryRes === "N" && o.selectedPrimary) w.push("The county records this parcel as not a primary residence, so today it is taxed on 100% of its value. Living in it takes that to 55%. This estimate follows your selection, not the seller's.");
+    else if (sig.primaryRes === "Y" && !o.selectedPrimary) w.push("The county records this parcel as a primary residence, taxed on 55%. Your selection estimates it as a second home, taxed on 100%. Either way the figure follows your selection.");
+  }
+  return w;
+}
+
+/* Every term of the equation, named and explained, so the figure is never a black box. */
+function equationTerms(sc, meta) {
+  meta = meta || {};
+  var year = meta.year || "the rate year on record";
+  var valueWhy = sc.basis === "county"
+    ? "The assessor's market value for this parcel, read from the county tax parcel record" +
+      (meta.asOf ? ", current as of " + meta.asOf : "") + ". A tax bill is built on the assessor's value: it is re-set every January 1 and does not move just because the home sold."
+    : "The purchase price you entered, standing in for the assessor's value. In the metro counties the assessor's value has recently landed at 94-100% of the sale price (Tax Commission assessment-to-sales ratio study, 2023), so typing a price usually runs a few percent high.";
+  var shareWhy = sc.share < 1
+    ? "A primary residence is taxed on 55% of market value, which is a 45% exemption: one per household, covering the home and up to one acre of land (Utah Code 59-2-1035)."
+    : "Not a primary residence, so 100% of market value is taxable. A second home, a rental and most investment property are taxed at close to double what a live-in owner pays on the same house.";
+  var bodies = (meta.count != null)
+    ? "the " + meta.count + " taxing bodies covering this parcel"
+      + (meta.paying != null && meta.paying !== meta.count
+        ? " (" + meta.paying + " levy a rate, the rest sit at zero)" : "")
+    : "the taxing bodies covering this parcel";
+  return [
+    { term: "Market value used", amount: money(sc.value), why: valueWhy },
+    { term: "× Taxable share", amount: pct(sc.share), why: shareWhy },
+    { term: "= Taxable value", amount: money(sc.taxable, 0), why: "What the rate is applied to. It is neither the market value nor the price, it is the taxable slice of one of them." },
+    { term: "× Combined rate", amount: rateStr(sc.rate), why: "The sum of the rates of " + bodies + " for tax year " + year + ". " + rateStr(sc.rate) + " means " + money(sc.perThousand, 2) + " per $1,000 of taxable value; the state publishes the same total as the rate for the parcel's tax area." },
+    { term: "= Annual tax", amount: money(sc.annual, 2), why: "One full year of general property tax for this parcel at the value above." },
+    { term: "÷ 12 = Monthly", amount: money(sc.monthly, 2), why: "The property tax piece of a monthly payment into escrow. Principal, interest, insurance and any HOA dues are separate." }
+  ];
+}
+
+/* The same equation as plain text, for the formula box, the copy button and the tests. */
+function formulaLines(sc, meta) {
+  meta = meta || {};
+  var occ = meta.primary == null ? "" : (meta.primary ? "   (primary residence)" : "   (not a primary residence)");
+  return "Market value   = " + money(sc.value) + "   (" + basisLabel(sc.basis) + ")\n" +
+    "Taxable value  = " + money(sc.value) + " × " + pct(sc.share) + occ + " = " + money(sc.taxable, 0) + "\n" +
+    "Combined rate  = " + rateStr(sc.rate) + " = " + money(sc.perThousand, 2) + " per $1,000, tax year " + (meta.year || "unknown") + "\n" +
+    "Annual tax     = " + money(sc.taxable, 0) + " × " + rateStr(sc.rate) + " = " + money(sc.annual, 2) + "\n" +
+    "Monthly tax    = " + money(sc.annual, 2) + " ÷ 12 = " + money(sc.monthly, 2);
+}
+
+/* The sentences that qualify the number without changing the arithmetic. */
+function estimateNotes(sc, meta) {
+  meta = meta || {};
+  var n = [
+    "Compared with the number on a listing or the seller's notice: that one is the tax under the seller's own occupancy. A house the seller rented is taxed on 100% of its value; the same house lived in by its owner is taxed on 55%. Occupancy changing at purchase moves the tax by close to half, either way.",
+    "Both value and rate are set as of January 1 each year. A sale does not by itself re-set the value, and improvements are usually added to the roll at the next January 1, so the first year after a purchase or a new build can land away from either figure here."
+  ];
+  if (meta.countyValueMissing) {
+    n.push("This county does not publish a market value on the parcel record, so the purchase price was used. Where the county's own value is available it is shown next to the price.");
+  }
+  n.push("Not in this number: special assessments, sewer, storm water and garbage service charges, delinquent prior-year tax, and senior, disabled or veteran relief a buyer may qualify for.");
+  return n;
+}
+
+if (typeof module !== "undefined") module.exports = {
+  parsePrice: parsePrice, looksLikeParcelId: looksLikeParcelId, parseAddress: parseAddress,
+  normalizeAddress: normalizeAddress, splitUnit: splitUnit, addressSimilarity: addressSimilarity,
+  buildAddressWhere: buildAddressWhere, parcelIdVariants: parcelIdVariants, buildParcelIdWhere: buildParcelIdWhere,
+  rankParcels: rankParcels, rankGeocodeCandidates: rankGeocodeCandidates, attrs: attrs,
+  distanceMeters: distanceMeters, pointInRings: pointInRings, interiorPoint: interiorPoint,
+  entityKind: entityKind, countyFromCode: countyFromCode, countyLabel: countyLabel, countyKey: countyKey,
+  summarizeEntities: summarizeEntities, computeTax: computeTax, money: money, rateStr: rateStr, pct: pct,
+  taxScenario: taxScenario, estimateSet: estimateSet, basisLabel: basisLabel,
+  equationTerms: equationTerms, formulaLines: formulaLines, estimateNotes: estimateNotes,
+  asOfDate: asOfDate, parcelSignals: parcelSignals, parcelClassWarnings: parcelClassWarnings,
+  equationStrip: equationStrip, diffPhrase: diffPhrase, splitNotes: splitNotes,
+  MATCH_MIN: MATCH_MIN, MAYBE_MIN: MAYBE_MIN, PARCELS_SERVICE: PARCELS_SERVICE, ENTITY_SERVICES: ENTITY_SERVICES
+};
+</script>
+<script>
+/* ---------- Network and page ---------- */
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  var fmt$ = function (n, d) { return "$" + n.toLocaleString("en-US", { minimumFractionDigits: d, maximumFractionDigits: d }); };
+  var fmtRate = function (r) { return r.toFixed(6); };
+  var esc = function (s) { return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); };
+  var store = {
+    get: function (k) { try { return window.localStorage.getItem(k); } catch (e) { return null; } },
+    set: function (k, v) { try { window.localStorage.setItem(k, v); } catch (e) {} }
+  };
+
+  var state = { parcel: null, entities: null, ranked: [], parsed: null, detail: null, matchNote: null, isExample: true };
+
+  /* The parcel services answer empty once in a while, so an empty answer is retried before it is
+     believed. A service that is not published yet (next year's rates) is reported, not retried. */
+  function arcQuery(service, params, opts) {
+    opts = opts || {};
+    var body = new URLSearchParams(Object.assign({ f: "json" }, params));
+    var tries = opts.allowEmpty === false ? 1 : (opts.tries || 3);
+    function later(n) { return new Promise(function (res) { setTimeout(function () { res(once(n)); }, 350 * (n + 1)); }); }
+    function once(n) {
+      return fetch(ARCGIS + service + "/FeatureServer/0/query", { method: "POST", body: body })
+        .then(function (r) {
+          if (!r.ok) throw Object.assign(new Error("HTTP " + r.status), { missing: r.status === 404 || r.status === 400, transient: r.status >= 500 });
+          return r.json();
+        })
+        .then(function (j) {
+          // A service that is not published yet says so in the body, with HTTP 200.
+          if (j.error) throw Object.assign(new Error(j.error.message || "service error"), { missing: true });
+          var fs = j.features || [];
+          return !fs.length && n + 1 < tries ? later(n + 1) : fs;
+        }, function (e) {
+          // Dropped connections and 5xx from these services are routine; try again before giving up.
+          if ((e.transient || /fetch failed|network|load failed/i.test(String(e && e.message))) && n + 1 < tries) return later(n + 1);
+          throw e;
+        });
+    }
+    return once(0);
+  }
+
+  function geocode(line) {
+    return fetch(GEOCODE_URL, {
+      method: "POST",
+      body: new URLSearchParams({ SingleLine: line, OutFields: "Addr_type", MaxLocations: "3", countryCode: "USA", f: "json" })
+    }).then(function (r) { return r.ok ? r.json() : { candidates: [] }; }, function () { return { candidates: [] }; });
+  }
+
+  var PARCEL_FIELDS = "PARCEL_ID,PARCEL_ADD,PARCEL_CITY,PARCEL_ZIP,County,OWN_TYPE,CoParcel_URL,ACCOUNT_NUM";
+
+  /* Parcels touching the geocoded point. The point lands on the street, so the search box grows
+     until something is found: about 7 m, then 65 m, then 330 m. */
+  function parcelsNearPoint(pt) {
+    var radii = [0.0002, 0.0008, 0.003], i = 0;
+    /* An empty box is usually a real answer (nothing there), not a dropped request, and these
+       services can take 10s+ a query, so growing the box beats re-asking the same tiny one.
+       Only the widest box gets the empty-response retry, and that one is worth believing. */
+    function usable(fs) {
+      return (fs || []).filter(function (f) { var a = attrs(f); return a.PARCEL_ID || a.PARCEL_ADD; });
+    }
+    function next() {
+      if (i >= radii.length) return Promise.resolve([]);
+      var r = radii[i++];
+      return arcQuery(PARCELS_SERVICE, {
+        geometry: (pt[0] - r) + "," + (pt[1] - r) + "," + (pt[0] + r) + "," + (pt[1] + r),
+        geometryType: "esriGeometryEnvelope", inSR: "4326", spatialRel: "esriSpatialRelIntersects",
+        outFields: PARCEL_FIELDS, returnGeometry: "true", outSR: "4326", resultRecordCount: "12"
+      }, { allowEmpty: i < radii.length }).then(function (fs) {
+        var ok = usable(fs);
+        return ok.length ? ok : next();
+      },
+        // One failing box is not a failed lookup; the wider box usually answers.
+        function () { return next(); });
+    }
+    return next();
+  }
+
+  function parcelsById(raw) {
+    function attempt(mode) {
+      return arcQuery(PARCELS_SERVICE, {
+        where: buildParcelIdWhere(raw, mode), outFields: PARCEL_FIELDS,
+        returnGeometry: "true", outSR: "4326", resultRecordCount: "20"
+      }, { allowEmpty: mode === "exact" });
+    }
+    return attempt("exact").then(function (fs) {
+      return fs.length ? { features: fs, mode: "id" } : attempt("prefix").then(function (fs2) { return { features: fs2, mode: "id" }; });
+    });
+  }
+
+  /* Recorded-address search. The statewide parcel table holds 1.6M rows and the address column is
+     not indexed, so a bare LIKE over the whole state is slow; a box around the geocoded point uses
+     the spatial index instead. The box grows, and only as a last resort do we scan the state. */
+  function parcelsByAddress(parsed, pt) {
+    var where = buildAddressWhere(parsed);
+    if (!where) return Promise.resolve({ features: [], mode: "address" });
+    // ~2 km then ~27 km: enough for any metro, and both stay on the spatial index. The unindexed
+    // statewide scan is only for the case where geocoding failed and we have no point to grow from.
+    var boxes = pt ? [0.02, 0.25] : [null];
+    var i = 0;
+    function next() {
+      if (i >= boxes.length) return Promise.resolve({ features: [], mode: "address" });
+      var r = boxes[i++];
+      var params = {
+        where: where, outFields: PARCEL_FIELDS, returnGeometry: "true", outSR: "4326",
+        resultRecordCount: "25", orderByFields: "PARCEL_ADD"
+      };
+      if (r != null) {
+        params.geometry = (pt[0] - r) + "," + (pt[1] - r) + "," + (pt[0] + r) + "," + (pt[1] + r);
+        params.geometryType = "esriGeometryEnvelope";
+        params.inSR = "4326";
+        params.spatialRel = "esriSpatialRelIntersects";
+      }
+      return arcQuery(PARCELS_SERVICE, params, { allowEmpty: true }).then(function (fs) {
+        return fs.length ? { features: fs, mode: "address" } : next();
+      });
+    }
+    return next();
+  }
+
+  /* Address → point → parcel, with the parcel table's own address text as the fallback when the
+     geocoder has nothing usable. */
+  /* The parcel service matched this parcel by its own number, which is stronger evidence than any
+     address text: mark those records as exact so the picker only appears when several really match. */
+  function idMatches(raw, pid) {
+    function canon(v) { return String(v == null ? "" : v).toUpperCase().replace(/[^0-9A-Z]/g, "").replace(/^0+(?=\d)/, ""); }
+    var a = canon(raw), b = canon(pid);
+    return !!a && !!b && (a === b || (a.length >= 6 && (b.indexOf(a) === 0 || a.indexOf(b) === 0)));
+  }
+
+  function findParcel(input) {
+    if (looksLikeParcelId(input)) {
+      return parcelsById(input).then(function (res) {
+        var ranked = rankParcels(res.features, null, null);
+        ranked.forEach(function (r) { if (idMatches(input, r.c.PARCEL_ID)) { r.bucket = 2; r.a = 1; r.s += 1e6; } });
+        return { ranked: ranked, parsed: null, how: "parcel number" };
+      });
+    }
+    var parsed = parseAddress(input);
+    if (!parsed.house) return Promise.reject(new Error("Include the house or lot number, for example 810 S 900 E, Salt Lake City."));
+    var line = /\butah\b|,\s*ut\b/i.test(input) ? input : input + ", Utah, USA";
+    var best = null;
+    return geocode(line).then(function (json) {
+      var pick = rankGeocodeCandidates(json, parsed).slice(0, 2);
+      function tryNext() {
+        // Out of geocode candidates: keep whatever the earlier candidates turned up.
+        if (!pick.length) return Promise.resolve(best);
+        var c = pick.shift();
+        return parcelsNearPoint([c.x, c.y]).then(function (fs) {
+          var ranked = rankParcels(fs, parsed, [c.x, c.y]);
+          if (ranked.length && (!best || ranked[0].s > best.ranked[0].s)) best = { ranked: ranked, point: c };
+          // A second geocoded point is worth asking only when the first found nothing at all: it is
+          // the same street, interpolated somewhere else, and every question costs seconds here.
+          return best ? best : tryNext();
+        }, tryNext);
+      }
+      return tryNext();
+    }).then(function (res) {
+      var point = res && res.point ? [res.point.x, res.point.y] : null;
+      var byPoint = res ? { ranked: res.ranked, parsed: parsed, how: "geocoded location", point: point } : null;
+      if (byPoint && byPoint.ranked[0].bucket === 2) return byPoint;
+      return parcelsByAddress(parsed, point).then(function (byAddr) {
+        var ranked = rankParcels(byAddr.features, parsed, point);
+        if (ranked.length && (!byPoint || ranked[0].s > byPoint.ranked[0].s)) return { ranked: ranked, parsed: parsed, how: "recorded address", point: point };
+        return byPoint || { ranked: [], parsed: parsed, how: "none", point: point };
+      }, function () { return byPoint || { ranked: [], parsed: parsed, how: "none", point: point }; });
+    });
+  }
+
+  /* A few counties publish the assessed market value and acreage in their own parcel layer.
+     Worth one extra request; the estimate does not depend on it. */
+  function parcelDetail(parcel) {
+    var svc = "Parcels_" + countyKey(parcel.County) + "_LIR";
+    if (!parcel.County || !parcel.PARCEL_ID) return Promise.resolve(null);
+    return arcQuery(svc, {
+      where: "PARCEL_ID = " + sqlQuote(String(parcel.PARCEL_ID).toUpperCase()) + " OR PARCEL_ID = " + sqlQuote(String(parcel.PARCEL_ID)),
+      /* Every county layer has its own columns, and asking for one a county does not
+         publish makes the whole request fail, so take whatever the county publishes. */
+      outFields: "*",
+      returnGeometry: "false", resultRecordCount: "2"
+    }, { allowEmpty: false }).then(function (fs) {
+      var a = fs.length ? attrs(fs[0]) : null;
+      return a && (a.TOTAL_MKT_VALUE || a.PARCEL_ACRES || a.PROP_CLASS) ? a : null;
+    }, function () { return null; });
+  }
+
+  /* Which rate service to ask first. If a year is published later (or pulled), this adapts itself. */
+  var ENTITY_KEY = "utahTaxEstimator.entityService";
+  var entityBad = {}; // this page session stops re-asking a year that answered "no such service"
+  function entityOrder() {
+    var good = store.get(ENTITY_KEY);
+    var list = ENTITY_SERVICES.filter(function (s) { return !entityBad[s]; });
+    if (!list.length) list = ENTITY_SERVICES.slice();
+    if (good) {
+      var i = list.indexOf(good);
+      if (i > 0) { list.splice(i, 1); list.unshift(good); }
+    }
+    return list;
+  }
+
+  function findEntities(pt) {
+    var params = {
+      geometry: pt[0] + "," + pt[1], geometryType: "esriGeometryPoint", inSR: "4326",
+      spatialRel: "esriSpatialRelIntersects",
+      outFields: "ENT_YR,ENT_CO,ENT_NBR,ENT_DESC,ENT_RATE", returnGeometry: "false", resultRecordCount: "50"
+    };
+    var list = entityOrder(), i = 0, lastError = null;
+    function next() {
+      if (i >= list.length) return Promise.reject(lastError || new Error("No tax rate data was published for this parcel."));
+      var svc = list[i++];
+      return arcQuery(svc, params, { allowEmpty: false }).then(function (fs) {
+        var s = summarizeEntities(fs);
+        if (!fs.length || s.total <= 0) { lastError = new Error("No tax rates were published for this parcel in " + svc.replace("economy_tax_entities_", "") + "."); return next(); }
+        s.service = svc;
+        store.set(ENTITY_KEY, svc);
+        return s;
+      }, function (e) {
+        if (e && e.missing) entityBad[svc] = true;
+        lastError = e.message ? e : lastError;
+        return next();
+      });
+    }
+    return next();
+  }
+
+  function setStatus(msg, isError) { var el = $("status"); el.textContent = msg || ""; el.classList.toggle("error", !!isError); }
+
+  function parcelLine(c) {
+    var bits = [];
+    if (c.County) bits.push(countyLabel(c.County) + " County");
+    if (c.PARCEL_ID) bits.push("Parcel " + c.PARCEL_ID);
+    if (c.ACCOUNT_NUM && c.ACCOUNT_NUM !== c.PARCEL_ID) bits.push("Account " + c.ACCOUNT_NUM);
+    return bits;
+  }
+
+  function sourceLink(c) {
+    var digits = String((c && c.PARCEL_ID) || "").replace(/[^0-9A-Za-z]/g, "");
+    if (c && countyKey(c.County) === "utah" && digits) {
+      return '<a href="https://www.utahcounty.gov/LandRecords/TaxSummary.asp?av_serial=' + encodeURIComponent(digits) + '" target="_blank" rel="noopener">Utah County treasurer record</a>';
+    }
+    var url = c && c.CoParcel_URL;
+    if (url && /^https?:\/\//.test(url)) return '<a href="' + esc(url) + '" target="_blank" rel="noopener">' + esc(countyLabel(c.County) || "County") + ' parcel map</a>';
+    return "";
+  }
+
+  function candidateList(ranked, limit) {
+    return ranked.slice(0, limit).map(function (r, i) {
+      var c = r.c;
+      var b = document.createElement("button");
+      b.type = "button";
+      b.innerHTML = esc(c.PARCEL_ADD || "(no address on record)") +
+        (c.PARCEL_CITY ? ", " + esc(c.PARCEL_CITY) : "") +
+        '<span class="mono">' + esc(parcelLine(c).join(" · ")) + (r.m != null ? " · about " + (r.m < 400 ? Math.round(r.m) + " m from the geocoded point" : (r.m / 1609.34).toFixed(2) + " mi from the geocoded point") : "") + "</span>";
+      b.addEventListener("click", function () { $("candidates").hidden = true; useParcel(c, { note: i === 0 ? state.matchNote : "You picked this parcel from the list of matches." }); });
+      return b;
+    });
+  }
+
+  /* Says out loud how sure the match is, so an approximate match is never silent. */
+  function matchNote(top) {
+    var want = state.parsed && state.parsed.raw ? String(state.parsed.raw) : null;
+    if (!state.parsed || !want || top.a >= 1) return null;
+    if (top.a >= MATCH_MIN) {
+      return "The parcel recorded here is " + (top.c.PARCEL_ADD || top.c.PARCEL_ID) + ", which reads as the same property as " +
+        want + ". Check the parcel number against the title report or tax notice.";
+    }
+    if (top.a >= MAYBE_MIN) return null;
+    var near = top.inside || (top.m != null && top.m <= 40);
+    return "No parcel in the state file carries exactly " + want + ". This is " +
+      (top.c.PARCEL_ADD ? "the parcel recorded as " + top.c.PARCEL_ADD + ", " : "the nearest parcel on record, ") +
+      (top.inside ? "covering" : "about " + (top.m != null ? Math.round(top.m) + " m from" : "next to")) +
+      " the spot that address geocoded to. Nothing here matches the address you typed, so confirm the parcel" +
+      (near ? " number on the tax notice." : " number on the tax notice before believing this estimate.");
+  }
+
+  function showCandidates(ranked) {
+    var box = $("candidates");
+    var someMatch = ranked.some(function (r) { return r.a >= MAYBE_MIN; });
+    box.innerHTML = '<div class="hint">' + (someMatch ?
+      "More than one parcel could match. Pick the right one:" :
+      "No parcel in the state file carries that exact address, so these are the parcels nearest the location it geocoded to. Each button shows the address on record \u2014 pick the one the tax notice or title report names:") + '</div>';
+    candidateList(ranked, 8).forEach(function (b) { box.appendChild(b); });
+    box.hidden = false;
+  }
+
+  function useParcel(c, opts) {
+    opts = opts || {};
+    state.parcel = c;
+    state.detail = null;
+    state.matchNote = opts.note || null;
+    setStatus("Loading tax rates for " + countyLabel(c.County || "") + " parcel " + c.PARCEL_ID + "…");
+    var pt = c._rings && c._rings.length ? interiorPoint(c._rings) : null;
+    if (!pt) { setStatus("That parcel has no boundary in the state file, so the districts on it cannot be read. Try the parcel number instead.", true); return; }
+    findEntities(pt).then(function (ent) {
+      state.entities = ent;
+      setStatus("");
+      render(false);
+      parcelDetail(c).then(function (d) { state.detail = d; render(false); }, function () { render(false); });
+    }, function (e) { setStatus(e && e.message ? e.message : "Could not read the rate data. Try again shortly.", true); });
+  }
+
+  function currentInputs() {
+    return { price: parsePrice($("price").value), primary: $("occ-primary").checked };
+  }
+
+  function render(isExample) {
+    var inp = currentInputs(), ent = state.entities, c = state.parcel;
+    if (!ent) return;
+    state.isExample = !!isExample;
+    var d = state.detail || {};
+    var countyValue = Number(d.TOTAL_MKT_VALUE) || 0;
+    /* Two possible values go into the same equation: the assessor's number, when the county
+       publishes one, and the price. The assessor's value leads because that is what a bill uses. */
+    var set = estimateSet({ price: inp.price || 0, countyValue: countyValue, primary: inp.primary, rate: ent.total });
+    var t = set.preferred;
+    var paying = ent.rows.filter(function (r) { return r.rate > 0; }).length;
+    var acres = Number(d.PARCEL_ACRES);
+    var sig = parcelSignals(d);
+    var warns = parcelClassWarnings(sig, { selectedPrimary: inp.primary }).concat(ent.warnings);
+    if (inp.primary && acres > 1) warns.push("This lot is " + acres.toFixed(2) + " acres. The primary residence exemption covers the home and up to one acre, so the estimate runs slightly low.");
+    if (state.matchNote) warns.unshift(state.matchNote);
+    if (!t) warns.unshift("Enter a purchase price to calculate the tax.");
+
+    var parcelHtml = c ? '<div class="parcel"><b>' + esc(c.PARCEL_ADD || "Address not recorded") +
+      (c.PARCEL_CITY ? ", " + esc(c.PARCEL_CITY) : "") + "</b><br><span class=\"mono\">" +
+      esc(parcelLine(c).join(" · ")) + (acres > 0 ? " · " + acres.toFixed(2) + " ac" : "") + "</span>" +
+      (countyValue || sig.klass ? '<br><span class="hint">County record: ' +
+        (countyValue ? "market value " + fmt$(countyValue, 0) : "no market value published") +
+        (sig.klass ? " · classified " + esc(sig.klass) : "") +
+        (sig.primaryRes ? " · " + (sig.primaryRes === "Y" ? "primary residence" : "not a primary residence") : "") +
+        (sig.asOf ? " · as of " + esc(sig.asOf) : "") + "</span>" : "") +
+      (sourceLink(c) ? "<br>" + sourceLink(c) : "") + "</div>" :
+      '<div class="parcel"><span class="hint">Example parcel, shown before you run a lookup.</span></div>';
+
+    var rowHtml = function (r) {
+      var share = t ? t.taxable * r.rate : 0;
+      return '<tr><td>' + esc(r.name) +
+        '<span class="kind">' + esc(r.kind) + (r.county && r.county !== countyLabel(c && c.County || "") ? " · " + esc(r.county) + " county" : "") +
+        (r.rate > 0 ? "" : " · no added tax") + "</span></td>" +
+        '<td class="num">' + fmtRate(r.rate) + '</td><td class="num">' + (t ? fmt$(share, 2) : "—") +
+        '</td><td class="num">' + (t ? fmt$(share / 12, 2) : "—") + "</td></tr>";
+    };
+    var liveRows = ent.rows.filter(function (r) { return r.rate > 0; });
+    var zeroRows = ent.rows.filter(function (r) { return !(r.rate > 0); });
+    var rows = liveRows.map(rowHtml).join("");
+    var zeroNote = zeroRows.length ?
+      '<details class="disc"><summary>' + zeroRows.length + " more " + (zeroRows.length === 1 ? "body covers" : "bodies cover") +
+      " this parcel at zero rate</summary><div class=\"tablewrap\"><table><tbody>" +
+      zeroRows.map(rowHtml).join("") + "</tbody></table></div>" +
+      '<p class="hint">A zero rate adds nothing to the total; these bodies redirect where part of the tax goes.</p></details>' : "";
+
+    var alternatives = (!isExample && state.ranked && state.ranked.length > 1) ?
+      '<h2>Not this parcel?</h2><div class="candidates" id="alts"></div>' : "";
+
+    var strip = t ? '<div class="eqstrip">' + esc(equationStrip(t)) +
+      ' <span class="kind">tax year ' + (ent.year || "unknown") + "</span></div>" : "";
+
+    var split = splitNotes(warns);
+    var topNotes = split.top.length ?
+      '<div class="warns">' + split.top.map(function (w) { return '<div class="warn">' + esc(w) + "</div>"; }).join("") + "</div>" : "";
+    var fine = (split.fine.length || t) ?
+      '<details class="disc"><summary>Fine print' + (split.fine.length ? " · " + split.fine.length : "") +
+      '<span class="kind">occupancy, timing, what is not included</span></summary>' +
+      (split.fine.length ? '<div class="warns">' + split.fine.map(function (w) { return '<div class="warn">' + esc(w) + "</div>"; }).join("") + "</div>" : "") +
+      (t ? '<ul class="notes">' + estimateNotes(t, { countyValueMissing: !countyValue }).map(function (n) { return "<li>" + esc(n) + "</li>"; }).join("") + "</ul>" : "") +
+      "</details>" : "";
+
+    var equation = t ?
+      '<details class="disc"><summary>How each term works<span class="kind">value, share, rate — and where each comes from</span></summary>' +
+      '<div class="tablewrap"><table class="eq"><thead><tr><th>Term</th><th class="num">Amount</th><th>What it is</th></tr></thead><tbody>' +
+      equationTerms(t, { year: ent.year, count: ent.rows.length, paying: paying, asOf: t.basis === "county" ? sig.asOf : "" }).map(function (r) {
+        return '<tr><td class="t">' + esc(r.term) + '</td><td class="num">' + esc(r.amount) + '</td><td class="why">' + esc(r.why) + "</td></tr>";
+      }).join("") + "</tbody></table></div></details>" : "";
+
+    var compare = (t && set.comparison) ?
+      '<details class="disc"><summary>Price vs the county\'s value · ' + esc(diffPhrase(set.diff)) +
+      '<span class="kind">both readings side by side</span></summary>' +
+      '<div class="tablewrap"><table><thead><tr><th>Value used</th><th class="num">Market value</th><th class="num">Taxable</th><th class="num">Per year</th><th class="num">Per month</th></tr></thead><tbody>' +
+      set.list.map(function (s) {
+        return '<tr class="' + (s.basis === t.basis ? "" : "zero") + '"><td>' +
+          (s.basis === "county" ? "County assessor's value" : "Purchase price") +
+          '<span class="kind">' + (s.basis === t.basis ? "used above" : "for comparison") + "</span></td>" +
+          '<td class="num">' + money(s.value) + '</td><td class="num">' + money(s.taxable, 0) +
+          '</td><td class="num">' + money(s.annual, 2) + '</td><td class="num">' + money(s.monthly, 2) + "</td></tr>";
+      }).join("") +
+      (set.diff ? '<tr class="total"><td>Difference (price − assessor)</td><td class="num"></td><td class="num"></td><td class="num">' +
+        (set.diff.annual >= 0 ? "+" : "−") + money(Math.abs(set.diff.annual), 2) + '</td><td class="num">' +
+        (set.diff.monthly >= 0 ? "+" : "−") + money(Math.abs(set.diff.monthly), 2) + " " + pct(Math.abs(set.diff.pct), 1) + "</td></tr>" : "") +
+      "</tbody></table></div>" +
+      '<p class="hint">A bill is calculated from the assessor\'s value, so that figure is the one to quote. The price row is what the county tends to move toward if this sale sets the local market, so the two bracket the likely bill.</p></details>' : "";
+
+    $("result").innerHTML =
+      '<div class="result-head"><div><div class="tag' + (isExample ? " example" : "") + '">' +
+      (isExample ? "Example · downtown Salt Lake City" : "Estimated monthly property tax") + "</div>" +
+      '<div class="big" id="monthly">' + (t ? fmt$(t.monthly, 2) : "—") + "<small>/ mo</small></div>" +
+      (t ? '<div class="hint">on ' + esc(basisLabel(t.basis)) + " of " + money(t.value) + "</div>" : "") + "</div>" +
+      '<button class="ghost" type="button" id="copy">Copy monthly amount</button></div>' +
+      strip +
+      parcelHtml +
+      topNotes +
+      "<h2>Where the tax goes<span class=\"kind\">" + paying + " of " + ent.rows.length + " bodies levy a rate</span></h2>" +
+      '<div class="tablewrap"><table><thead><tr><th>Taxing entity</th><th class="num">Rate</th><th class="num">Per year</th><th class="num">Per month</th></tr></thead><tbody>' +
+      rows + '<tr class="total"><td>Total</td><td class="num">' + fmtRate(ent.total) + '</td><td class="num">' + (t ? fmt$(t.annual, 2) : "—") +
+      '</td><td class="num">' + (t ? fmt$(t.monthly, 2) : "—") + "</td></tr></tbody></table></div>" +
+      zeroNote + compare + equation + fine + alternatives;
+
+    if (!isExample && state.ranked.length > 1) {
+      var alts = $("alts");
+      candidateList(state.ranked.slice(1), 4).forEach(function (b) { alts.appendChild(b); });
+    }
+
+    $("formula").textContent = t ? formulaLines(t, { year: ent.year, primary: inp.primary })
+      : "Enter a purchase price to see the arithmetic.";
+
+    $("copy").addEventListener("click", function () {
+      if (!t) { return; }
+      var v = t.monthly.toFixed(2), btn = this;
+      var done = function () { btn.textContent = "Copied " + v; setTimeout(function () { btn.textContent = "Copy monthly amount"; }, 1800); };
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(v).then(done, function () { selectMonthly(); });
+      else selectMonthly();
+    });
+  }
+
+  function selectMonthly() {
+    var el = $("monthly"), r = document.createRange();
+    r.selectNodeContents(el.firstChild ? el : el);
+    var s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
+  }
+
+  $("form").addEventListener("submit", function (e) {
+    e.preventDefault();
+    var input = $("addr").value.trim();
+    $("candidates").hidden = true;
+    if (!input) { setStatus("Enter an address or parcel number.", true); return; }
+    if (!parsePrice($("price").value)) { setStatus("Enter the purchase price.", true); return; }
+    $("go").disabled = true;
+    setStatus("Finding the parcel…");
+    findParcel(input).then(function (res) {
+      var ranked = (res.ranked || []).map(function (r) { r.c._rings = r.rings || (r.c._rings); return r; });
+      state.ranked = ranked;
+      state.parsed = res.parsed;
+      if (!ranked.length) {
+        setStatus("No parcel matched that " + (looksLikeParcelId(input) ? "parcel number" : "address") +
+          " in the state parcel file. Check the house number, or try the parcel number from the county's records.", true);
+        return;
+      }
+      var top = ranked[0], second = ranked[1] || null;
+      // bucket 2 = the parcel's own PARCEL_ID or its recorded address is exactly what was typed,
+      // which includes a parcel-number search (where there is no address to match at all).
+      var clear = top.bucket === 2 || top.a >= MATCH_MIN;
+      var dominant = !second || top.s - second.s >= 1e5 || (second.bucket !== 2 && second.a < MATCH_MIN);
+      // "Close enough to be the place the address points at". Anything looser is not a match, and
+      // saying so beats printing a tax bill for somebody else's lot.
+      var near = top.inside || (top.m != null && top.m <= 40);
+      var noAddress = ranked.every(function (r) { return !r.a; });
+      if ((clear && dominant) || (near && (!second || noAddress)) || (ranked.length === 1 && noAddress)) {
+        useParcel(top.c, { note: matchNote(top) });
+        return;
+      }
+      setStatus("");
+      showCandidates(ranked);
+    }, function (err) { setStatus(err && err.message ? err.message : "Could not reach the State of Utah parcel service.", true); })
+      .then(function () { $("go").disabled = false; });
+  });
+
+  ["price"].forEach(function (id) { $(id).addEventListener("input", function () { if (state.entities) render(state.isExample && !state.parcel); }); });
+  ["occ-primary", "occ-other"].forEach(function (id) { $(id).addEventListener("change", function () { if (state.entities) render(state.isExample && !state.parcel); }); });
+  $("price").addEventListener("blur", function () { var p = parsePrice(this.value); if (p) this.value = p.toLocaleString("en-US"); });
+
+  /* Example shown on load, from the 2025 tax year entity rates the State Tax Commission publishes
+     for a downtown Salt Lake City parcel. Replaced as soon as you run a lookup. */
+  state.entities = summarizeEntities([
+    { ENT_YR: 2025, ENT_CO: "18", ENT_NBR: 1010, ENT_DESC: "SALT LAKE COUNTY", ENT_RATE: 0.001253 },
+    { ENT_YR: 2025, ENT_CO: "18", ENT_NBR: 2010, ENT_DESC: "SALT LAKE CITY SCHOOL DISTRICT", ENT_RATE: 0.003767 },
+    { ENT_YR: 2025, ENT_CO: "18", ENT_NBR: 3010, ENT_DESC: "SALT LAKE CITY", ENT_RATE: 0.00318 },
+    { ENT_YR: 2025, ENT_CO: "18", ENT_NBR: 4010, ENT_DESC: "CENTRAL UTAH WATER CONSERVANCY DISTRICT", ENT_RATE: 0.0004 },
+    { ENT_YR: 2025, ENT_CO: "18", ENT_NBR: 4020, ENT_DESC: "SALT LAKE METROPOLITAN WATER DISTRICT", ENT_RATE: 0.000327 },
+    { ENT_YR: 2025, ENT_CO: "18", ENT_NBR: 4030, ENT_DESC: "SALT LAKE CITY MOSQUITO ABATEMENT DISTRICT", ENT_RATE: 0.000163 },
+    { ENT_YR: 2025, ENT_CO: "18", ENT_NBR: 1015, ENT_DESC: "SALT LAKE COUNTY ASSESSING LEVY", ENT_RATE: 0.000136 },
+    { ENT_YR: 2025, ENT_CO: "18", ENT_NBR: 6005, ENT_DESC: "SALT LAKE CITY LIBRARY FOUNDATION", ENT_RATE: 0.000014 },
+    { ENT_YR: 2025, ENT_CO: "18", ENT_NBR: 8001, ENT_DESC: "STATE STREET COMMUNITY REINVESTMENT AREA", ENT_RATE: 0 }
+  ]);
+  render(true);
+})();
+</script>
+</body>
+</html>
