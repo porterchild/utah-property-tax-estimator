@@ -22,11 +22,35 @@ node tools/serve.mjs 5123        # http://localhost:5123
 There is no build step and no key: the page talks directly to Utah's public services
 (`services1.arcgis.com`, `geocode.arcgis.com`). Lookups need internet access from the browser.
 
+## JSON API
+
+The server exposes the same pipeline as JSON, with permissive CORS, so spreadsheets and
+grouping tools can call it directly:
+
+```
+curl "http://localhost:5123/api/estimate?address=500 W Center St, Provo&price=605000"
+curl "http://localhost:5123/api/estimate?address=08221800110000&primary=false"
+curl "http://localhost:5123/api"          # self-describing endpoint index
+```
+
+Params: `address` (street address or parcel number, required), `price` (optional),
+`primary` (`true` default, `false` for a second home / rental).
+
+The response carries the parcel, the match quality (`exact` / `nearest` / `approximate`,
+with `needs_review`, an explanatory `note`, and `candidates` when several parcels plausibly
+match one address), the county's own record (market value, class, recorded occupancy,
+as-of date), the estimate with every equation term, per-entity rates, warnings and notes.
+Errors: `400` bad input, `404` no parcel matched, `502` upstream service trouble.
+Each call is a handful of live Utah-service requests (a few seconds); keep batch sizes sane.
+
+`node tools/smoke-api.mjs` runs the API cases live against an ephemeral server.
+
 ## Verify it
 
 ```
 node --test tests/logic.test.mjs     # 33 unit tests over the page's own logic
 node tools/smoke-live.mjs            # 11 live lookups through the shipped page
+node tools/smoke-api.mjs             # live JSON API cases
 node tools/validate-taxdistrict.mjs /tmp/r600-2025.json 2   # rates vs Report 600
 ```
 

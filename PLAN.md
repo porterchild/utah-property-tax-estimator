@@ -114,7 +114,7 @@ Done since the last handoff: live smoke tests (§10), Report 600 validation, sta
 2. **Widen the validation runs.** `node tools/validate-lookup.mjs <perCounty> "<counties>"` is the mirror of the app's lookup; run it over more counties (especially the rural 21) and record exact-match rates per county.
 3. **Re-check `economy_tax_entities_2026`** in the fall, after truth-in-taxation. Nothing to change in the code — the page tries it first and the year label comes from `ENT_YR`.
 4. **Watch the two open UI behaviours**: the picker shown when two parcels share one recorded address, and "nearest parcel" auto-selection, which must keep printing the confirmation note.
-5. **Choose hosting** (static site; only `services1.arcgis.com` and `geocode.arcgis.com` are contacted), and, if brokers want it, a tiny JSON endpoint (`/estimate?address=…&price=…&occupancy=…`) so spreadsheets can call it directly. A server-side version would also be the place to add a keyed UGRC geocoder.
+5. ~~Choose hosting~~ The JSON endpoint exists: `tools/serve.mjs` now answers `/api/estimate?address=…&price=…&primary=…` (and a self-describing `/api`) by running the same pipeline server-side through `tools/pipeline.mjs` (§12). A server-side version is also the place to add a keyed UGRC geocoder later.
 6. Optional: report the app's own misses. The two known miss shapes (duplicate recorded addresses, and an address that exists only as a neighbour) are invisible to us today.
 
 ## 8. All 29 counties: parcel layers
@@ -174,6 +174,9 @@ LIR value coverage (share of rows with a non-null `TOTAL_MKT_VALUE` / `PARCEL_AC
 | `tools/report600.mjs` | Parses a Report 600 PDF into `COUNTY|areaID|sub` rows of certified/proposed/adopted entity rates and area totals. |
 | `tools/validate-rates.mjs` | Compares the entity-layer sum at sampled points against parsed Report 600 totals. |
 | `tools/validate-taxdistrict.mjs` | Per-parcel rate check that skips the state's tax-area polygons: reads `TAX_DISTRICT` off the county parcel record, sums the entity rates at that parcel's own interior point, compares with Report 600 for that district. `node tools/validate-taxdistrict.mjs /tmp/r600-2025.json,/tmp/r600-2024.json 2`. |
+| `tools/pipeline.mjs` | The page's lookup mirrored for the server: `estimate({address, price, primary})` returns JSON-ready parcel, match quality, county record, entity rows and the estimate. Shared by the API and `tools/smoke-api.mjs`. |
+| `tools/serve.mjs` | Static server for the page on the LAN plus the JSON API (`/api/estimate`, self-describing `/api`), CORS-enabled, max 3 estimates in flight, serves nothing but the estimator. `node tools/serve.mjs [port]`. |
+| `tools/smoke-api.mjs` | Boots the server on an ephemeral port and runs live API cases: 200 paths (address, parcel number, second home, location-only match), 404, 400, and the CORS header. |
 | `tools/lir-fields.mjs` | Asks all 29 county parcel layers for one row with `outFields=*` and prints the value/class/occupancy field names. Cheap, and the only safe way to learn what each county publishes. |
 | `tools/probe.mjs`, `tools/coverage.mjs`, `tools/entities-inventory.mjs`, `tools/dup-rates.mjs` | One-off probes: layer/field discovery, `PARCEL_ADD` and value coverage per county, entity description inventory, duplicate-rate checks. |
 
@@ -242,6 +245,9 @@ The tax on a listing sheet or a seller's notice is the tax under the **seller's*
 - Larger lenders buy LOS-integrated tax feeds (Cotality/CoreLogic "Property Tax Basic" / "Property Tax Estimator" style products) that answer statewide in seconds.
 - So the honest pitch is not "faster than the listing sheet". It is: **one statewide parcel + entity + rate interface** for the cases where there is no listing sheet and no working portal answer — off-market parcels, new construction with no tax history, rural counties, and (later) batches.
 - Batch throughput is the real broker feature and it is not built: 20–50 addresses needs nearest-match plus a `needs_review=Y` column, and must never pop the address picker.
+
+### JSON API for spreadsheets and batch work
+`tools/pipeline.mjs` is the shipped page's lookup mirrored server-side (geocode → box-ranked parcels, recorded-address fallback, parcel-number branch, entities at an interior point with the 2026→2025 fallback, county record for the market value), ending in the same pure estimate functions. `tools/serve.mjs` serves it at `/api/estimate` with permissive CORS and a 3-request concurrency guard, alongside the static page. Honest ambiguity semantics carry over: a location-only or approximate match returns the best candidate **plus** `needs_review: true`, the explanation note, and `candidates[]` — the API never silently picks, and never blocks the way the browser picker does. Verified by `tools/smoke-api.mjs` (7 live cases: address, parcel number, second-home share, location-only match, 404, 400, CORS header).
 
 ### The panel was restructured for progressive disclosure
 First pass at the same information was a wall of text: every term explained inline, both value tables, four note paragraphs, and the full entity table all open at once. The panel now reads in three levels:
