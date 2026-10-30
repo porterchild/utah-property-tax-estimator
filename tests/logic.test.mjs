@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { loadLogic } from "../tools/logic-loader.mjs";
+import { parseParams, shapeResult, idMatches, ApiError } from "../tools/pipeline.mjs";
 
 const L = await loadLogic();
 const {
@@ -407,4 +408,124 @@ test("notes split into what stays up and what folds away", () => {
   assert.match(s.fine[0], /classifies this parcel as Commercial/);
   assert.match(s.fine[2], /slightly low/);
   assert.deepEqual(splitNotes([]), { top: [], fine: [] });
+});
+
+/* ---------- API layer: the response shape, without touching the network ---------- */
+
+const RING = [[[-111.667, 40.233], [-111.666, 40.233], [-111.666, 40.234], [-111.667, 40.234], [-111.667, 40.233]]];
+const parcel = (over = {}) => Object.assign({
+  PARCEL_ID: "040660009", PARCEL_ADD: "500 W CENTER ST", PARCEL_CITY: "Provo", County: "Utah"
+}, over);
+const cand = (over = {}) => Object.assign({ c: parcel(), rings: RING, bucket: 0, a: 0.9, s: 0.9, inside: true, m: 5 }, over);
+const ents = (over = {}) => Object.assign({
+  rows: [
+    { name: "PROVO CITY SCHOOL DISTRICT", kind: "School district", county: "Utah", rate: 0.006922 },
+    { name: "PROVO", kind: "City or town", county: "Utah", rate: 0.001599 },
+    { name: "CENTRAL UTAH WATER CONSERVANCY", kind: "Water district", county: "Utah", rate: 0 }
+  ],
+  total: 0.008521, year: 2025, warnings: [], count: 3, service: "economy_tax_entities_2025"
+}, over);
+const roll = (over = {}) => Object.assign({
+  TOTAL_MKT_VALUE: 293500, PROP_CLASS: "Residential", PRIMARY_RES: "Y",
+  CURRENT_ASOF: Date.UTC(2026, 8, 29), PARCEL_ACRES: 0.25
+}, over);
+const shape = (over = {}) => shapeResult({
+  input: Object.assign({ address: "500 W Center St, Provo", price: 400000, primary: true }, over.input || {}),
+  found: Object.assign({ ranked: [cand()], how: "geocoded location", point: [-111.6667, 40.2334] }, over.found || {}),
+  ent: ents(over.ent || {}),
+  detail: "detail" in over ? over.detail : roll()
+});
+
+test("api params: primary defaults to true, the synonyms say false, price parses like the page's", () => {
+  assert.deepEqual(
+    { a: parseParams({ address: " x " }).address, p: parseParams({ address: "x" }).primary },
+    { a: "x", p: true }
+  );
+  for (const v of ["false", "0", "other", "second"]) assert.equal(parseParams({ address: "x", primary: v }).primary, false, v);
+  for (const v of [undefined, "true", "1", "yes"]) assert.equal(parseParams({ address: "x", primary: v }).primary, true, String(v));
+  assert.equal(parseParams({ address: "x", price: "605,000" }).price, 605000);
+  assert.equal(parseParams({ address: "x", price: "" }).price, null);
+  assert.throws(() => parseParams({}), (e) => e instanceof ApiError && e.status === 400);
+});
+
+test("api match semantics: exact, nearest, approximate, ambiguous", () => {
+  const exact = shape({ found: { ranked: [cand({ bucket: 2, a: 1, s: 1e6 + 1 })], how: "recorded address", point: null } });
+  assert.equal(exact.match.quality, "exact");
+  assert.equal(exact.match.needs_review, false);
+  assert.equal(exact.match.note, null);
+  assert.equal(exact.match.candidates.length, 0);
+
+  const near = shape({});
+  assert.equal(near.match.quality, "nearest");
+  assert.equal(near.match.needs_review, true);
+  assert.match(near.match.note, /No parcel in the state file carries exactly/);
+  assert.match(near.match.note, /Confirm the parcel number/);
+  assert.equal(near.match.geocoded.lat, 40.2334);
+
+  const far = shape({ found: { ranked: [cand({ inside: false, m: 350, a: 0.62 })], how: "geocoded location", point: [-111.6667, 40.2334] } });
+  assert.equal(far.match.quality, "approximate");
+  assert.match(far.match.note, /about 350 m/);
+
+  const amb = shape({
+    found: {
+      ranked: [cand({ inside: false, m: 30, a: 0.8 }), cand({ c: parcel({ PARCEL_ID: "040660010" }), inside: false, m: 60, a: 0.6 })],
+      how: "geocoded location", point: [-111.6667, 40.2334]
+    }
+  });
+  assert.equal(amb.match.ambiguous, true);
+  assert.equal(amb.match.candidates.length, 2);
+  assert.equal(amb.match.candidates[0].distance_m, 30);
+  assert.equal(amb.match.candidates[1].parcel_id, "040660010");
+  assert.equal(amb.match.needs_review, true, "an ambiguous api answer always asks for review");
+});
+
+test("api estimate: county value leads, price compares, per-entity dollars add up", () => {
+  const r = shape({});
+  assert.equal(r.estimate.basis, "county");
+  assert.equal(r.estimate.market_value, 293500);
+  assert.equal(r.estimate.taxable_share, 0.55);
+  assert.equal(r.estimate.taxable_value, 161425);
+  assert.equal(r.comparison.basis, "price");
+  assert.equal(r.comparison.market_value, 400000);
+  assert.ok(r.difference.monthly > 0 && Math.abs(r.difference.monthly - (r.comparison.monthly - r.estimate.monthly)) < 0.01);
+  assert.ok(r.difference.pct > 30 && r.difference.pct < 40, "price sits well above the county roll here");
+  const set = estimateSet({ price: 400000, countyValue: 293500, primary: true, rate: 0.008521 });
+  assert.equal(r.estimate.equation, equationStrip(set.preferred));
+  const school = r.entities.find((e) => e.kind === "School district");
+  assert.equal(school.annual, Math.round(set.preferred.taxable * 0.006922 * 100) / 100);
+  const water = r.entities.find((e) => e.rate === 0);
+  assert.equal(water.annual, 0);
+  assert.equal(r.levy_summary.bodies, 3);
+  assert.equal(r.levy_summary.levying, 2);
+  assert.equal(r.county_record.value_as_of, "2026-09-29");
+  assert.match(r.sources.entities, /economy_tax_entities_2025/);
+});
+
+test("api occupancy: second home taxes 100%, and the seller's recorded status is surfaced", () => {
+  const r = shape({ input: { address: "500 W Center St, Provo", price: 400000, primary: false } });
+  assert.equal(r.estimate.taxable_share, 1);
+  assert.equal(r.estimate.basis, "county");
+  const fine = r.warnings.fine.join(" ");
+  assert.match(fine, /records this parcel as a primary residence/);
+  assert.match(fine, /follows your selection/);
+});
+
+test("api honesty rules: no value, missing roll, oversized lot", () => {
+  const none = shape({ detail: null });
+  assert.match(none.county_record.note, /publishes no value/);
+  assert.equal(none.estimate.basis, "price");
+  assert.ok(none.notes.some((n) => /does not publish a market value/.test(n)));
+  assert.throws(() => shape({ detail: null, input: { address: "x", price: 0, primary: true } }),
+    (e) => e instanceof ApiError && e.status === 400, "nothing to tax must be a 400, not a zero bill");
+  const big = shape({ detail: roll({ PARCEL_ACRES: 2.4 }) });
+  assert.ok(big.warnings.fine.some((w) => /2\.40 acres/.test(w) && /slightly low/.test(w)));
+  assert.equal(big.parcel.acres, 2.4);
+});
+
+test("idMatches tolerates formatting, not coincidence", () => {
+  assert.equal(idMatches("040660009", "040660009"), true);
+  assert.equal(idMatches("40-660-009", "040660009"), true);
+  assert.equal(idMatches("40660009", "040660009"), true, "leading zero dropped");
+  assert.equal(idMatches("040660009", "040660019"), false);
+  assert.equal(idMatches("", "040660009"), false);
 });

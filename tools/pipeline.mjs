@@ -64,7 +64,7 @@ async function parcelsByWhere(where, pt) {
 }
 
 /* From the shipped page: a parcel-number hit is stronger evidence than any address text. */
-function idMatches(raw, pid) {
+export function idMatches(raw, pid) {
   const canon = (v) => String(v == null ? "" : v).toUpperCase().replace(/[^0-9A-Z]/g, "").replace(/^0+(?=\d)/, "");
   const a = canon(raw), b = canon(pid);
   return !!a && !!b && (a === b || (a.length >= 6 && (b.indexOf(a) === 0 || a.indexOf(b) === 0)));
@@ -152,22 +152,26 @@ function scenarioJson(s) {
   };
 }
 
-/* One full estimate. `input` is what a caller typed; everything downstream is live data. */
-export async function estimate(input) {
+/* Query params, parsed and validated once, so the server and the tests share the rules. */
+export function parseParams(input) {
   const address = String(input.address || "").trim();
   if (!address) throw new ApiError(400, "Send ?address= a street address or parcel number.");
-  const price = L.parsePrice(input.price == null ? "" : String(input.price));
-  const primary = !(input.primary === "false" || input.primary === "0" || input.primary === "other" || input.primary === "second");
+  return {
+    address,
+    price: L.parsePrice(input.price == null ? "" : String(input.price)),
+    primary: !(input.primary === "false" || input.primary === "0" || input.primary === "other" || input.primary === "second")
+  };
+}
 
-  const found = await findParcel(address);
+/* Everything the API returns, built only from data a caller can fabricate. Pure on purpose:
+   the response shape is unit-tested without touching the network. */
+export function shapeResult({ input, found, ent, detail }) {
   const top = (found.ranked || [])[0];
   if (!top) throw new ApiError(404, "No parcel matched that address in the state parcel layer.");
   const c = top.c;
   const rings = top.rings || c._rings;
   if (!rings || !rings.length) throw new ApiError(502, "The matched parcel has no boundary in the state file, so its districts cannot be read.");
-
-  const ent = await entitiesAt(L.interiorPoint(rings));
-  const detail = await parcelDetail(c);
+  const address = input.address, price = input.price || 0, primary = input.primary;
   const countyValue = Number(detail && detail.TOTAL_MKT_VALUE) || 0;
   const set = L.estimateSet({ price: price || 0, countyValue, primary, rate: ent.total });
   const t = set.preferred;
@@ -190,7 +194,7 @@ export async function estimate(input) {
   const paying = ent.rows.filter((r) => r.rate > 0);
 
   return {
-    query: { address, price: price || 0, primary },
+    query: { address, price: price, primary },
     parcel: {
       id: c.PARCEL_ID, county: L.countyLabel(c.County || "") || c.County || null,
       recorded_address: c.PARCEL_ADD || null, city: c.PARCEL_CITY || null, zip: c.PARCEL_ZIP || null,
@@ -230,4 +234,17 @@ export async function estimate(input) {
     },
     disclaimer: "Estimate only, not a tax bill or legal determination. Excludes special assessments, service charges, delinquencies and relief programs."
   };
+}
+
+/* One full estimate: the network steps in sequence, then the pure shaping above. */
+export async function estimate(input) {
+  const q = parseParams(input);
+  const found = await findParcel(q.address);
+  const top = (found.ranked || [])[0];
+  if (!top) throw new ApiError(404, "No parcel matched that address in the state parcel layer.");
+  const rings = top.rings || top.c._rings;
+  if (!rings || !rings.length) throw new ApiError(502, "The matched parcel has no boundary in the state file, so its districts cannot be read.");
+  const ent = await entitiesAt(L.interiorPoint(rings));
+  const detail = await parcelDetail(top.c);
+  return shapeResult({ input: q, found, ent, detail });
 }
