@@ -18,6 +18,7 @@ const CASES = [
   { qs: "address=500 W Center St, Provo&price=605000", expect: 200, why: "address with city, price only basis" },
   { qs: "address=08221800110000&price=605000&primary=false", expect: 200, why: "parcel number, county value basis, second home" },
   { qs: "address=175 N Main St, Tooele", expect: 200, why: "location-only match -> needs_review + no price (county value carries it)" },
+  { qs: "address=15 N Main St, Garland, UT", expect: 200, why: "typed city disagrees with the parcel record — must need review" },
   { qs: "address=9999 Nowhere Zz Rd, Monticello", expect: 404, why: "address that does not exist" },
   { qs: "address=", expect: 400, why: "missing address" },
   { qs: "address=810 S 900&price=400000", expect: 200, why: "grid input without the cross street still finds the parcel" }
@@ -45,6 +46,12 @@ for (const c of CASES) {
     if (c.qs.startsWith("address=175")) {
       if (!body.match.needs_review) problems.push("location-only match should need review");
       if (!body.match.note) problems.push("location-only match should carry a note");
+    }
+    if (c.qs.includes("Garland")) {
+      // Regression: the user-found bug where 15 N Main St, Garland answered Clarkston as exact.
+      if (body.match.city_check && body.match.city_check.ok) problems.push("city_check said ok for a wrong-town exact match");
+      if (!body.match.needs_review) problems.push("wrong-town exact match passed without needs_review");
+      if (body.match.quality === "exact" && !body.match.note) problems.push("exact-but-wrong-town carries no note");
     }
     if (c.qs.includes("primary=false") && e.taxable_share !== 1) problems.push("second home share should be 1, got " + e.taxable_share);
     if (c.qs.startsWith("address=0822") && body.estimate.basis !== "county") problems.push("county value should lead: " + body.estimate.basis);

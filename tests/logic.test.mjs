@@ -10,7 +10,7 @@ const {
   pointInRings, interiorPoint, distanceMeters, entityKind, countyFromCode, countyLabel, countyKey,
   summarizeEntities, computeTax, MATCH_MIN, MAYBE_MIN,
   money, rateStr, pct, taxScenario, estimateSet, basisLabel, equationTerms, formulaLines, estimateNotes,
-  asOfDate, parcelSignals, parcelClassWarnings, equationStrip, diffPhrase, splitNotes
+  asOfDate, parcelSignals, parcelClassWarnings, equationStrip, diffPhrase, splitNotes, placeCheck
 } = L;
 
 test("parsePrice accepts the shapes people type", () => {
@@ -528,4 +528,50 @@ test("idMatches tolerates formatting, not coincidence", () => {
   assert.equal(idMatches("40660009", "040660009"), true, "leading zero dropped");
   assert.equal(idMatches("040660009", "040660019"), false);
   assert.equal(idMatches("", "040660009"), false);
+});
+
+/* ---------- place honesty: the city typed must match the place on the parcel (user-found bug) ---------- */
+test("placeCheck: the typed city or ZIP must agree with the parcel record", () => {
+  assert.equal(placeCheck("500 W Center St, Provo", { PARCEL_CITY: "Provo", PARCEL_ZIP: "84601" }).ok, true);
+  const garland = placeCheck("15 N Main St, Garland, UT", { PARCEL_CITY: "Clarkston", PARCEL_ZIP: "84305" });
+  assert.equal(garland.ok, false);
+  assert.match(garland.note, /^The place on the parcel record/);
+  assert.match(garland.note, /Garland/);
+  assert.match(garland.note, /recorded in Clarkston/);
+  assert.match(garland.note, /confirm the parcel number/i);
+  assert.equal(splitNotes([garland.note]).top.length, 1, "a place mismatch belongs at top level, not fine print");
+  assert.equal(placeCheck("810 S 900 E, Salt Lake", { PARCEL_CITY: "SALT LAKE CITY" }).ok, true, "containment same place");
+  assert.equal(placeCheck("1 N Main St, Saint George", { PARCEL_CITY: "St. George" }).ok, true);
+  assert.equal(placeCheck("100 Main St, Ogden", {}).ok, true, "no recorded place, nothing to check");
+  assert.equal(placeCheck("100 Main St", { PARCEL_CITY: "Ogden" }).ok, true, "nothing typed, nothing to check");
+  assert.equal(placeCheck("100 Main St, 84401", { PARCEL_ZIP: "84058" }).ok, false, "ZIP-only input still checks");
+  assert.equal(placeCheck("100 Main St 84401", { PARCEL_ZIP: "84058" }).ok, true,
+    "documented parser boundary: without a comma the ZIP is a street token, not a claimed place");
+  assert.equal(placeCheck("100 Main St, Provo 84601", { PARCEL_CITY: "PROVO", PARCEL_ZIP: "84606" }).ok, true,
+    "city agrees, ZIP drift on the county record stays silent");
+  assert.equal(placeCheck("040660009", { PARCEL_CITY: "Orem" }).ok, true, "a parcel-number search types no place");
+});
+
+test("rankParcels: same street string, the town the buyer named ranks first", () => {
+  const near = (cx, cy) => [[cx - 0.0005, cy - 0.0002], [cx + 0.0005, cy - 0.0002], [cx + 0.0005, cy + 0.0002], [cx - 0.0005, cy + 0.0002], [cx - 0.0005, cy - 0.0002]];
+  const at = (id, city, cx, cy) => ({ attributes: { PARCEL_ID: id, PARCEL_ADD: "15 N MAIN ST", PARCEL_CITY: city }, geometry: { rings: [near(cx, cy)] } });
+  const pt = [-111.6670, 40.2340];
+  const withCity = rankParcels([at("C1", "Clarkston", pt[0], pt[1]), at("G1", "Garland", -111.705, 40.270)], "15 N Main St, Garland, UT", pt);
+  assert.equal(withCity[0].c.PARCEL_ID, "G1", "the Garland parcel must win for a Garland-typed address despite distance");
+  assert.equal(withCity[0].bucket, 2);
+  const noCity = rankParcels([at("C1", "Clarkston", pt[0], pt[1]), at("G1", "Garland", -111.705, 40.270)], "15 N Main St", pt);
+  assert.equal(noCity[0].c.PARCEL_ID, "C1", "with no town typed, nearness still decides — boost only, never a penalty");
+});
+
+test("api: an exact street string in the wrong town comes back needing review", () => {
+  const r = shape({ input: { address: "500 W Center St, Garland", price: 400000, primary: true }, found: { ranked: [cand({ bucket: 2, a: 1 })], how: "recorded address", point: null } });
+  assert.equal(r.match.quality, "exact");
+  assert.equal(r.match.city_check.ok, false);
+  assert.equal(r.match.city_check.parcel_city, "Provo");
+  assert.equal(r.match.needs_review, true, "wrong town is a review flag even with an exact street match");
+  assert.match(r.match.note, /Garland/);
+  assert.match(r.match.note, /recorded in Provo/);
+  const okCity = shape({ found: { ranked: [cand({ bucket: 2, a: 1 })], how: "recorded address", point: null } });
+  assert.equal(okCity.match.city_check.ok, true);
+  assert.equal(okCity.match.needs_review, false);
 });

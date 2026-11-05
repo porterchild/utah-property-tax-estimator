@@ -38,7 +38,8 @@ Params: `address` (street address or parcel number, required), `price` (optional
 
 The response carries the parcel, the match quality (`exact` / `nearest` / `approximate`,
 with `needs_review`, an explanatory `note`, and `candidates` when several parcels plausibly
-match one address), the county's own record (market value, class, recorded occupancy,
+match one address; a city or ZIP that disagrees with the parcel record sets `needs_review`
+even when the street matched exactly — `match.city_check` carries both sides), the county's own record (market value, class, recorded occupancy,
 as-of date), the estimate with every equation term, per-entity rates, warnings and notes.
 Errors: `400` bad input, `404` no parcel matched, `502` upstream service trouble.
 Each call is a handful of live Utah-service requests (a few seconds); keep batch sizes sane.
@@ -48,8 +49,8 @@ Each call is a handful of live Utah-service requests (a few seconds); keep batch
 ## Verify it
 
 ```
-node --test tests/logic.test.mjs     # 33 unit tests over the page's own logic
-node tools/smoke-live.mjs            # 11 live lookups through the shipped page
+node --test tests/logic.test.mjs     # 42 unit tests over the page's own logic
+node tools/smoke-live.mjs            # 12 live lookups through the shipped page
 node tools/smoke-api.mjs             # live JSON API cases
 node tools/validate-taxdistrict.mjs /tmp/r600-2025.json 2   # rates vs Report 600
 ```

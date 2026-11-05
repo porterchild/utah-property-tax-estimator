@@ -159,7 +159,8 @@ export function parseParams(input) {
   return {
     address,
     price: L.parsePrice(input.price == null ? "" : String(input.price)),
-    primary: !(input.primary === "false" || input.primary === "0" || input.primary === "other" || input.primary === "second")
+    primary: !(input.primary === "false" || input.primary === "0" || input.primary === "other" || input.primary === "second"),
+    parsed: L.parseAddress(address)
   };
 }
 
@@ -180,11 +181,16 @@ export function shapeResult({ input, found, ent, detail }) {
 
   const exact = top.bucket === 2;
   const near = top.inside || (top.m != null && top.m <= 40);
+  /* The typed city/ZIP is evidence: "15 N Main St" exists in a dozen towns, and the recorded-address
+     fallback searches statewide, so an exact street string can still name the wrong town. */
+  const place = L.placeCheck(input.parsed || L.parseAddress(address), c);
   const quality = exact ? "exact" : near ? "nearest" : "approximate";
   const note = exact ? null
     : `No parcel in the state file carries exactly “${address}”. This is ${c.PARCEL_ADD ? `the parcel recorded as ${c.PARCEL_ADD}` : "the nearest parcel on record"}` +
       `${top.inside ? ", covering the spot the address geocoded to" : top.m != null ? `, about ${Math.round(top.m)} m from the spot the address geocoded to` : ""}. Confirm the parcel number on the tax notice or title report.`;
   const ambiguous = !exact && found.ranked.length > 1 && top.a >= L.MAYBE_MIN;
+  const typedCity = (input.parsed && input.parsed.city) || null;
+  const typedZip = (input.parsed && input.parsed.zip) || null;
 
   const warns = L.parcelClassWarnings(sig, { selectedPrimary: primary }).concat(ent.warnings);
   if (primary && Number(detail && detail.PARCEL_ACRES) > 1) {
@@ -202,9 +208,11 @@ export function shapeResult({ input, found, ent, detail }) {
       county_link: c.CoParcel_URL || null
     },
     match: {
-      how: found.how, quality, note,
+      how: found.how, quality,
+      note: [place.ok ? null : place.note, note].filter(Boolean).join(" ") || null,
+      city_check: { typed_city: typedCity, parcel_city: c.PARCEL_CITY || null, typed_zip: typedZip, parcel_zip: c.PARCEL_ZIP || null, ok: place.ok },
       geocoded: found.point ? { lon: +found.point[0].toFixed(6), lat: +found.point[1].toFixed(6) } : null,
-      needs_review: !exact,
+      needs_review: !exact || !place.ok,
       ambiguous,
       candidates: ambiguous ? found.ranked.slice(0, 8).map((r) => ({
         parcel_id: r.c.PARCEL_ID, recorded_address: r.c.PARCEL_ADD || null, city: r.c.PARCEL_CITY || null,

@@ -12,6 +12,7 @@ const CASES = [
   { address: "1000 N 400 E, Bountiful", price: "475,000", why: "Davis, grid with city" },
   { address: "1300 Kearns Blvd, Park City, UT", price: "1,750,000", why: "Summit, condo-style ids" },
   { address: "1299 Kearny Blvd, Park City", price: "1,750,000", why: "misspelt street degrades gracefully", expect: "ambiguous" },
+  { address: "15 N Main St, Garland, UT", price: "400,000", why: "wrong-town exact match must shout", expect: "place" },
   { address: "9999 Nowhere Zz Rd, Monticello", price: "200,000", why: "address that does not exist", expect: "miss" },
   { address: "12345678901234", price: "200,000", why: "parcel number that does not exist", expect: "miss" }
 ];
@@ -26,6 +27,15 @@ for (const c of CASES) {
   const r = await lookup(dom, c);
   const o = readout(r.text || "");
   let bad;
+  if (c.expect === "place") {
+    // The bug a real user found: an exact street string in a neighbouring town, typed city Garland.
+    // Either the picker opens (cities are visible on each choice) or the answer carries the place
+    // warning at top level. A silent exact match is a regression.
+    const shouts = r.kind === "ambiguous" || /place on the parcel record does not match/.test(r.text || "");
+    console.log((shouts ? "ok  " : "FAIL") + "  " + c.address.padEnd(40) + " " + c.why.padEnd(27) + (r.kind === "ambiguous" ? "picker with " + r.candidates + " options" : "auto-picked, " + (shouts ? "place warning shown" : "NO WARNING — silent wrong town")));
+    if (!shouts) { fails++; console.log("       ↳ problem: exact street string across towns passed without review"); }
+    continue;
+  }
   if (c.expect === "miss") {
     bad = r.kind === "result" && Number(o.rate) > 0 ? "expected no match, got rate " + o.rate : null;
     if (r.kind === "ambiguous") bad = "expected no match, got " + r.candidates + " candidates";

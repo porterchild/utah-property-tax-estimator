@@ -531,6 +531,42 @@ function interiorPoint(rings) {
   return best || [outer[0][0], outer[0][1]];
 }
 
+/* The city or ZIP someone typed is evidence, not just a hint to the geocoder. "15 N Main St"
+   exists in a dozen towns, and a parcel recorded in a different place than the one typed must
+   never come back as an exact match without review — the way it once did when 15 N Main St,
+   Garland answered with a parcel in Clarkston. */
+function placeName(s) {
+  return String(s == null ? "" : s).toUpperCase().replace(/[.'’]/g, " ").replace(/\b(UT|UTAH|USA)\b/g, " ").replace(/\bST\b/g, "SAINT").replace(/\bMT\b/g, "MOUNT").replace(/\s+/g, " ").trim();
+}
+/* "SALT LAKE" and "SALT LAKE CITY" are the same place. Word-boundary containment only; a false
+   negative stays silent (as before), while a false positive would shout, so err lenient. */
+function samePlace(a, b) {
+  if (!a || !b || a === b) return true;
+  return (" " + a + " ").indexOf(" " + b + " ") >= 0 || (" " + b + " ").indexOf(" " + a + " ") >= 0;
+}
+/* Parsed addresses are upper case; quoting them back shouted. Title-case a shout, keep anything
+   the human already typed in mixed case. */
+function showPlace(s) {
+  var t = String(s == null ? "" : s).trim();
+  if (!t || /[a-z]/.test(t)) return t;
+  return t.toLowerCase().replace(/\b[a-z]/g, function (ch) { return ch.toUpperCase(); });
+}
+function placeCheck(parsed, c) {
+  var p = typeof parsed === "string" ? parseAddress(parsed) : parsed;
+  if (!p || !c) return { ok: true, note: null };
+  var typedCity = p.city ? placeName(p.city) : null;
+  var onCity = placeName(c.PARCEL_CITY);
+  var typedZip = p.zip || null;
+  var onZip = String(c.PARCEL_ZIP == null ? "" : c.PARCEL_ZIP).slice(0, 5) || null;
+  var cityAgrees = typedCity && onCity && samePlace(typedCity, onCity);
+  var problems = [];
+  if (typedCity && onCity && !cityAgrees) problems.push("you typed “" + showPlace(p.city) + "”, but this parcel is recorded in " + showPlace(c.PARCEL_CITY));
+  if (typedZip && onZip && typedZip !== onZip && !cityAgrees) problems.push("you typed ZIP " + typedZip + ", this parcel's ZIP is " + onZip);
+  if (!problems.length) return { ok: true, note: null };
+  return { ok: false, note: "The place on the parcel record does not match what you typed: " + problems.join("; ") +
+    ". Streets repeat across towns, so this may be a different property — confirm the parcel number against the tax notice before using this estimate." };
+}
+
 /* Rank parcels found near a geocoded point. A clear address match always beats a closer parcel
    with a different address, because the geocoded point lands on the street between properties. */
 function rankParcels(features, parsed, pt) {
@@ -546,7 +582,11 @@ function rankParcels(features, parsed, pt) {
     // Nobody shops for a street or a state right-of-way, so those lose a "nearest parcel" tie; an
     // address that really matches still wins by the bucket term.
     var gov = /government|state of utah|\budot\b|right of way/i.test(String(c.OWN_TYPE || "") + " " + String(c.PARCEL_ID || "")) ? -1200 : 0;
-    var s = bucket * 1e6 + inside + gov + (m == null ? 3000 : Math.max(0, 3000 - Math.min(m, 3000))) + a * 10;
+    /* Among same-address parcels the one in the town named wins outright — boost only, never a
+       penalty, because a stale or missing PARCEL_CITY must not demote the honest candidate. */
+    var cityBonus = 0;
+    if (p && p.city && c.PARCEL_CITY && samePlace(placeName(p.city), placeName(c.PARCEL_CITY))) cityBonus = 1e5;
+    var s = bucket * 1e6 + cityBonus + inside + gov + (m == null ? 3000 : Math.max(0, 3000 - Math.min(m, 3000))) + a * 10;
     return { c: c, a: a, m: m, rings: rings, bucket: bucket, s: s, inside: !!inside };
   }).filter(Boolean).sort(function (x, y) { return y.s - x.s; });
 }
@@ -724,7 +764,7 @@ function diffPhrase(diff) {
 function splitNotes(warns) {
   var top = [], fine = [];
   (warns || []).forEach(function (w) {
-    if (/^(No parcel in the state file|This is the parcel|You picked this parcel|Enter a purchase price)/.test(w) ||
+    if (/^(No parcel in the state file|This is the parcel|You picked this parcel|Enter a purchase price|The place on the parcel record)/.test(w) ||
         /more than one (city|school district)|No school district levy|No county levy/.test(w)) top.push(w);
     else fine.push(w);
   });
@@ -835,7 +875,7 @@ if (typeof module !== "undefined") module.exports = {
   taxScenario: taxScenario, estimateSet: estimateSet, basisLabel: basisLabel,
   equationTerms: equationTerms, formulaLines: formulaLines, estimateNotes: estimateNotes,
   asOfDate: asOfDate, parcelSignals: parcelSignals, parcelClassWarnings: parcelClassWarnings,
-  equationStrip: equationStrip, diffPhrase: diffPhrase, splitNotes: splitNotes,
+  equationStrip: equationStrip, diffPhrase: diffPhrase, splitNotes: splitNotes, placeCheck: placeCheck,
   MATCH_MIN: MATCH_MIN, MAYBE_MIN: MAYBE_MIN, PARCELS_SERVICE: PARCELS_SERVICE, ENTITY_SERVICES: ENTITY_SERVICES
 };
 </script>
@@ -1091,7 +1131,11 @@ if (typeof module !== "undefined") module.exports = {
       b.innerHTML = esc(c.PARCEL_ADD || "(no address on record)") +
         (c.PARCEL_CITY ? ", " + esc(c.PARCEL_CITY) : "") +
         '<span class="mono">' + esc(parcelLine(c).join(" · ")) + (r.m != null ? " · about " + (r.m < 400 ? Math.round(r.m) + " m from the geocoded point" : (r.m / 1609.34).toFixed(2) + " mi from the geocoded point") : "") + "</span>";
-      b.addEventListener("click", function () { $("candidates").hidden = true; useParcel(c, { note: i === 0 ? state.matchNote : "You picked this parcel from the list of matches." }); });
+      b.addEventListener("click", function () {
+        $("candidates").hidden = true;
+        var pn = state.parsed ? placeCheck(state.parsed, c).note : null;
+        useParcel(c, { note: [pn, i === 0 ? state.matchNote : "You picked this parcel from the list of matches."].filter(Boolean).join(" ") || null });
+      });
       return b;
     });
   }
@@ -1294,7 +1338,8 @@ if (typeof module !== "undefined") module.exports = {
       var near = top.inside || (top.m != null && top.m <= 40);
       var noAddress = ranked.every(function (r) { return !r.a; });
       if ((clear && dominant) || (near && (!second || noAddress)) || (ranked.length === 1 && noAddress)) {
-        useParcel(top.c, { note: matchNote(top) });
+        var placeNote = state.parsed ? placeCheck(state.parsed, top.c).note : null;
+        useParcel(top.c, { note: [placeNote, matchNote(top)].filter(Boolean).join(" ") || null });
         return;
       }
       setStatus("");
