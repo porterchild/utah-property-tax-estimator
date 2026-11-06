@@ -19,6 +19,7 @@ const CASES = [
   { qs: "address=08221800110000&price=605000&primary=false", expect: 200, why: "parcel number, county value basis, second home" },
   { qs: "address=175 N Main St, Tooele", expect: 200, why: "location-only match -> needs_review + no price (county value carries it)" },
   { qs: "address=15 N Main St, Garland, UT", expect: 200, why: "typed city disagrees with the parcel record — must need review" },
+  { qs: "address=500 W Center St, Provo, UT 84601&price=605000", expect: 200, why: "typed ZIP agrees with the parcel record — stays confident" },
   { qs: "address=9999 Nowhere Zz Rd, Monticello", expect: 404, why: "address that does not exist" },
   { qs: "address=", expect: 400, why: "missing address" },
   { qs: "address=810 S 900&price=400000", expect: 200, why: "grid input without the cross street still finds the parcel" }
@@ -41,6 +42,10 @@ for (const c of CASES) {
     if (!e.rate_year) problems.push("no rate year");
     if (!e.equation) problems.push("no equation strip");
     if (body.match.needs_review === undefined) problems.push("no needs_review flag");
+    // The never-silent rule, on every answered case: a confident answer may contradict the typed
+    // place only if it also says needs_review.
+    if (body.match.needs_review === false && body.match.city_check && body.match.city_check.ok === false)
+      problems.push("confident answer contradicts the typed place");
     const hasValue = e.market_value > 0 || (body.comparison && body.comparison.market_value > 0);
     if (!hasValue) problems.push("no value on any basis");
     if (c.qs.startsWith("address=175")) {
@@ -54,6 +59,11 @@ for (const c of CASES) {
       if (body.match.quality === "exact" && !body.match.note) problems.push("exact-but-wrong-town carries no note");
     }
     if (c.qs.includes("primary=false") && e.taxable_share !== 1) problems.push("second home share should be 1, got " + e.taxable_share);
+    if (c.qs.includes("84601")) {
+      if (!(body.match.city_check && body.match.city_check.typed_zip === "84601" && body.match.city_check.ok))
+        problems.push("agreed ZIP did not come back as city_check.ok");
+      if (body.match.needs_review) problems.push("an agreeing ZIP must not force review");
+    }
     if (c.qs.startsWith("address=0822") && body.estimate.basis !== "county") problems.push("county value should lead: " + body.estimate.basis);
   } else {
     if (!body.error) problems.push("error body missing");

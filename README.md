@@ -51,7 +51,9 @@ Each call is a handful of live Utah-service requests (a few seconds); keep batch
 ```
 node --test tests/logic.test.mjs     # 42 unit tests over the page's own logic
 node tools/smoke-live.mjs            # 12 live lookups through the shipped page
-node tools/smoke-api.mjs             # live JSON API cases
+node tools/smoke-api.mjs             # 9 live JSON API cases
+node tools/validate-match.mjs        # identity integrity: right parcel, never a silent wrong town
+node tools/validate-match.mjs --quick   # 30-second version of the above
 node tools/validate-taxdistrict.mjs /tmp/r600-2025.json 2   # rates vs Report 600
 ```
 
