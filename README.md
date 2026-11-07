@@ -49,7 +49,7 @@ Each call is a handful of live Utah-service requests (a few seconds); keep batch
 ## Verify it
 
 ```
-node --test tests/logic.test.mjs     # 42 unit tests over the page's own logic
+node --test tests/logic.test.mjs     # 44 unit tests over the page's own logic
 node tools/smoke-live.mjs            # 12 live lookups through the shipped page
 node tools/smoke-api.mjs             # 9 live JSON API cases
 node tools/validate-match.mjs        # identity integrity: right parcel, never a silent wrong town

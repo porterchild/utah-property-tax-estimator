@@ -10,7 +10,7 @@ const {
   pointInRings, interiorPoint, distanceMeters, entityKind, countyFromCode, countyLabel, countyKey,
   summarizeEntities, computeTax, MATCH_MIN, MAYBE_MIN,
   money, rateStr, pct, taxScenario, estimateSet, basisLabel, equationTerms, formulaLines, estimateNotes,
-  asOfDate, parcelSignals, parcelClassWarnings, equationStrip, diffPhrase, splitNotes, placeCheck
+  asOfDate, parcelSignals, parcelClassWarnings, equationStrip, diffPhrase, splitNotes, placeCheck, samePlace
 } = L;
 
 test("parsePrice accepts the shapes people type", () => {
@@ -545,11 +545,34 @@ test("placeCheck: the typed city or ZIP must agree with the parcel record", () =
   assert.equal(placeCheck("100 Main St, Ogden", {}).ok, true, "no recorded place, nothing to check");
   assert.equal(placeCheck("100 Main St", { PARCEL_CITY: "Ogden" }).ok, true, "nothing typed, nothing to check");
   assert.equal(placeCheck("100 Main St, 84401", { PARCEL_ZIP: "84058" }).ok, false, "ZIP-only input still checks");
-  assert.equal(placeCheck("100 Main St 84401", { PARCEL_ZIP: "84058" }).ok, true,
-    "documented parser boundary: without a comma the ZIP is a street token, not a claimed place");
+  assert.equal(placeCheck("100 Main St 84401", { PARCEL_ZIP: "84058" }).ok, false,
+    "a ZIP without a comma still claims a place");
   assert.equal(placeCheck("100 Main St, Provo 84601", { PARCEL_CITY: "PROVO", PARCEL_ZIP: "84606" }).ok, true,
     "city agrees, ZIP drift on the county record stays silent");
   assert.equal(placeCheck("040660009", { PARCEL_CITY: "Orem" }).ok, true, "a parcel-number search types no place");
+});
+
+test("place words: contractions, abbreviations and typos are rules, not a word list", () => {
+  assert.equal(samePlace("ST GEORGE", "SAINT GEORGE"), true, "ST from SAINT: first letter, last letter, in order");
+  assert.equal(samePlace("MT PLEASANT", "MOUNT PLEASANT"), true);
+  assert.equal(samePlace("FRUIT HTS", "FRUITHEIGHTS"), true, "spaced and smashed records agree");
+  assert.equal(samePlace("FT RITCHIE", "FORT RITCHIE"), true);
+  assert.equal(samePlace("KEARNY", "KEARNEY"), true, "one edit in a five-letter word");
+  assert.equal(samePlace("ST", "STATE"), false, "a contraction needs the last letter; STATE fails it");
+  assert.equal(samePlace("PROVO", "OGDEN"), false);
+  assert.equal(samePlace("LA VERKIN", "SPRINGVILLE"), false);
+  assert.equal(samePlace("SALT LAKE CITY", "SALT LAKE"), true);
+  assert.equal(placeCheck("100 Main St, Mount Pleasant", { PARCEL_CITY: "Mt Pleasant" }).ok, true);
+  assert.equal(placeCheck("100 Main St, Fruit Heights", { PARCEL_CITY: "FRUITHEIGHTS" }).ok, true);
+});
+
+test("parseAddress: a comma-less trailing ZIP is a place, a grid number is not", () => {
+  assert.equal(parseAddress("100 Main St 84401").zip, "84401");
+  assert.equal(parseAddress("100 Main St 84401-1234").zip, "84401");
+  assert.equal(parseAddress("500 W Center St 84601").house, "500", "house number survives the strip");
+  assert.equal(parseAddress("810 S 12000 E").zip, null, "grid numbers are five digits too; ZIPs are 84xxx");
+  assert.equal(parseAddress("810 S 900 E 84070").zip, "84070", "grid address plus real ZIP");
+  assert.ok(!/84401/.test(parseAddress("100 Main St 84401").norm), "the ZIP leaves the street line, polluting no query");
 });
 
 test("rankParcels: same street string, the town the buyer named ranks first", () => {

@@ -344,6 +344,13 @@ function parseAddress(input) {
   var zipM = locality.match(/\b(\d{5})(?:-\d{4})?\b/);
   var zip = zipM ? zipM[1] : null;
   var city = locality.replace(/\d{5}(-\d{4})?/, " ").replace(/\bUT(AH)?\b/g, " ").replace(/\s+/g, " ").trim() || null;
+  /* A ZIP without a comma still claims a place, so take it from the end of the line. The 84
+     prefix is what makes this safe: a bare five-digit tail is just as likely a grid number
+     ("810 S 12000 E"), and every Utah ZIP is 840xx-847xx. */
+  if (!zip && parts.length === 1) {
+    var tz = street.match(/\s(84\d{3})(?:-\d{4})?\s*$/);
+    if (tz) { zip = tz[1]; street = street.slice(0, tz.index).trim(); }
+  }
 
   var u = splitUnit(street);
   var norm = normalizeAddress(u.street);
@@ -536,13 +543,50 @@ function interiorPoint(rings) {
    never come back as an exact match without review — the way it once did when 15 N Main St,
    Garland answered with a parcel in Clarkston. */
 function placeName(s) {
-  return String(s == null ? "" : s).toUpperCase().replace(/[.'’]/g, " ").replace(/\b(UT|UTAH|USA)\b/g, " ").replace(/\bST\b/g, "SAINT").replace(/\bMT\b/g, "MOUNT").replace(/\s+/g, " ").trim();
+  return String(s == null ? "" : s).toUpperCase().replace(/[.'’]/g, " ").replace(/\b(UT|UTAH|USA)\b/g, " ").replace(/\s+/g, " ").trim();
 }
-/* "SALT LAKE" and "SALT LAKE CITY" are the same place. Word-boundary containment only; a false
-   negative stays silent (as before), while a false positive would shout, so err lenient. */
+/* "SALT LAKE" and "SALT LAKE CITY" are the same place, as are "ST GEORGE" and "SAINT GEORGE",
+   "MT PLEASANT" and "MOUNT PLEASANT", "FRUIT HTS" and "FRUITHEIGHTS" — not because a list says
+   so, but because place words are the same word under contraction, abbreviation, or a typo.
+   Token by token: equality; prefix; a contraction anchored on its first letter, last letter and
+   letters-in-order (ST from SAINT, HTS from HEIGHTS — and NOT "ST" from "STATE", which fails the
+   last-letter anchor); or one edit in a five-letter word. Phrase by phrase: every word of the
+   shorter side must match some word of the longer side. False negatives stay silent while false
+   positives would shout, so the rules err lenient on purpose. */
+function withinOneEdit(a, b) {
+  if (a === b) return true;
+  if (Math.abs(a.length - b.length) > 1 || (a.length < 5 && b.length < 5)) return false;
+  var i = 0, j = 0, edited = false;
+  while (i < a.length && j < b.length) {
+    if (a.charAt(i) === b.charAt(j)) { i++; j++; continue; }
+    if (edited) return false;
+    edited = true;
+    if (a.length === b.length) { i++; j++; }
+    else if (a.length > b.length) i++;
+    else j++;
+  }
+  return true;
+}
+function tokenMatch(a, b) {
+  if (a === b) return true;
+  var x = a.length <= b.length ? a : b, y = a.length <= b.length ? b : a;
+  if (x.length >= 3 && y.indexOf(x) === 0) return true;
+  if (x.length >= 2 && x.length <= 4 && y.length > x.length && x.charAt(0) === y.charAt(0) &&
+      x.charAt(x.length - 1) === y.charAt(y.length - 1)) {
+    var k = 0;
+    for (var ci = 0; ci < y.length && k < x.length; ci++) if (y.charAt(ci) === x.charAt(k)) k++;
+    if (k === x.length) return true;
+  }
+  return y.length >= 5 && withinOneEdit(x, y);
+}
 function samePlace(a, b) {
   if (!a || !b || a === b) return true;
-  return (" " + a + " ").indexOf(" " + b + " ") >= 0 || (" " + b + " ").indexOf(" " + a + " ") >= 0;
+  var ta = String(a).toUpperCase().split(/\s+/).filter(Boolean);
+  var tb = String(b).toUpperCase().split(/\s+/).filter(Boolean);
+  if (!ta.length || !tb.length) return true;
+  if (ta.join("") === tb.join("")) return true; /* FRUIT HTS / FRUITHEIGHTS */
+  var shorter = ta.length <= tb.length ? ta : tb, longer = ta.length <= tb.length ? tb : ta;
+  return shorter.every(function (t) { return longer.some(function (u) { return tokenMatch(t, u); }); });
 }
 /* Parsed addresses are upper case; quoting them back shouted. Title-case a shout, keep anything
    the human already typed in mixed case. */
@@ -875,7 +919,7 @@ if (typeof module !== "undefined") module.exports = {
   taxScenario: taxScenario, estimateSet: estimateSet, basisLabel: basisLabel,
   equationTerms: equationTerms, formulaLines: formulaLines, estimateNotes: estimateNotes,
   asOfDate: asOfDate, parcelSignals: parcelSignals, parcelClassWarnings: parcelClassWarnings,
-  equationStrip: equationStrip, diffPhrase: diffPhrase, splitNotes: splitNotes, placeCheck: placeCheck,
+  equationStrip: equationStrip, diffPhrase: diffPhrase, splitNotes: splitNotes, placeCheck: placeCheck, samePlace: samePlace,
   MATCH_MIN: MATCH_MIN, MAYBE_MIN: MAYBE_MIN, PARCELS_SERVICE: PARCELS_SERVICE, ENTITY_SERVICES: ENTITY_SERVICES
 };
 </script>
