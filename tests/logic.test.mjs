@@ -552,18 +552,25 @@ test("placeCheck: the typed city or ZIP must agree with the parcel record", () =
   assert.equal(placeCheck("040660009", { PARCEL_CITY: "Orem" }).ok, true, "a parcel-number search types no place");
 });
 
-test("place words: contractions, abbreviations and typos are rules, not a word list", () => {
-  assert.equal(samePlace("ST GEORGE", "SAINT GEORGE"), true, "ST from SAINT: first letter, last letter, in order");
-  assert.equal(samePlace("MT PLEASANT", "MOUNT PLEASANT"), true);
-  assert.equal(samePlace("FRUIT HTS", "FRUITHEIGHTS"), true, "spaced and smashed records agree");
-  assert.equal(samePlace("FT RITCHIE", "FORT RITCHIE"), true);
-  assert.equal(samePlace("KEARNY", "KEARNEY"), true, "one edit in a five-letter word");
-  assert.equal(samePlace("ST", "STATE"), false, "a contraction needs the last letter; STATE fails it");
-  assert.equal(samePlace("PROVO", "OGDEN"), false);
-  assert.equal(samePlace("LA VERKIN", "SPRINGVILLE"), false);
-  assert.equal(samePlace("SALT LAKE CITY", "SALT LAKE"), true);
-  assert.equal(placeCheck("100 Main St, Mount Pleasant", { PARCEL_CITY: "Mt Pleasant" }).ok, true);
-  assert.equal(placeCheck("100 Main St, Fruit Heights", { PARCEL_CITY: "FRUITHEIGHTS" }).ok, true);
+test("samePlace: place words match by USPS vocabulary, not invented similarity", () => {
+  const yes = [
+    ["ST GEORGE", "SAINT GEORGE"], ["MT PLEASANT", "MOUNT PLEASANT"],
+    ["FT RITCHIE", "FORT RITCHIE"], ["STE GENEVIEVE", "SAINTE GENEVIEVE"],
+    ["FRUIT HTS", "FRUIT HEIGHTS"], ["FRUITHEIGHTS", "FRUIT HEIGHTS"],
+    ["MTN VERNON", "MOUNTAIN VERNON"], ["ST GEORGE", "ST. GEORGE"],
+    ["Provo", "PROVO"], ["SALT LAKE", "SALT LAKE CITY"],
+  ];
+  for (const [a, b] of yes) assert.equal(L.samePlace(a, b), true, `should match: ${a} / ${b}`);
+  const no = [["ST", "STATE"], ["PROVO", "OGDEN"], ["KEARNY", "KEARNEY"], ["PROVO", "PROVOO"]];
+  for (const [a, b] of no) assert.equal(L.samePlace(a, b), false, `should differ: ${a} / ${b}`);
+});
+
+/* Deliberate, and the direction is the point: an unknown spelling (a typo, a nickname,
+   any abbreviation outside the vocabulary) is NOT silently accepted. It flags for review
+   instead. A false alarm asks a question; silence would assert a falsehood. */
+test("samePlace: spellings outside the vocabulary flag — never matched silently", () => {
+  assert.equal(L.samePlace("KEARNY", "KEARNEY"), false);
+  assert.equal(L.samePlace("PROVOO", "PROVO"), false);
 });
 
 test("parseAddress: a comma-less trailing ZIP is a place, a grid number is not", () => {
